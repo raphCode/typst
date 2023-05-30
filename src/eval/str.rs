@@ -535,7 +535,7 @@ impl Hash for Regex {
 }
 
 cast_from_value! {
-    Regex: "regex",
+    Regex: "regular expression",
 }
 
 /// A pattern which can be searched for in a string.
