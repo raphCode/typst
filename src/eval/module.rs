@@ -3,10 +3,30 @@ use std::sync::Arc;
 
 use ecow::{eco_format, EcoString};
 
-use super::{Content, Scope, Value};
+use super::{ty, Content, Scope, Value};
 use crate::diag::StrResult;
 
-/// An evaluated module, ready for importing or typesetting.
+/// An evaluated module, either built-in or resulting from a file.
+///
+/// You can access definitions from the module using [field access
+/// notation]($scripting/#fields) and interact with it using the [import and
+/// include syntaxes]($scripting/#modules).
+///
+/// ## Example { #example }
+/// ```example
+/// <<< #import "utils.typ"
+/// <<< #utils.add(2, 5)
+///
+/// <<< #import utils: sub
+/// <<< #sub(1, 4)
+/// >>> #7
+/// >>>
+/// >>> #(-3)
+/// ```
+///
+/// Display: Module
+/// Category: foundations
+#[ty("module")]
 #[derive(Clone, Hash)]
 #[allow(clippy::derived_hash_with_manual_eq)]
 pub struct Module(Arc<Repr>);

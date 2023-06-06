@@ -2,8 +2,19 @@ use super::*;
 
 /// A ratio of a whole.
 ///
-/// _Note_: `50%` is represented as `0.5` here, but stored as `50.0` in the
-/// corresponding [literal](crate::syntax::ast::Numeric).
+/// Written as a number, followed by a percent sign.
+///
+/// ## Example { #example }
+/// ```example
+/// #set align(center)
+/// #scale(x: 150%)[
+///   Scaled apart.
+/// ]
+/// ```
+///
+/// Display: Ratio
+/// Category: layout
+#[ty("ratio")]
 #[derive(Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Ratio(Scalar);
 
@@ -94,11 +105,35 @@ impl Mul<f64> for Ratio {
     }
 }
 
+impl Mul<Float> for Ratio {
+    type Output = Self;
+
+    fn mul(self, rhs: Float) -> Self::Output {
+        self * rhs.as_f64()
+    }
+}
+
 impl Mul<Ratio> for f64 {
     type Output = Ratio;
 
     fn mul(self, other: Ratio) -> Ratio {
         other * self
+    }
+}
+
+impl Mul<Ratio> for Float {
+    type Output = Ratio;
+
+    fn mul(self, other: Ratio) -> Ratio {
+        other * self.as_f64()
+    }
+}
+
+impl Div for Ratio {
+    type Output = f64;
+
+    fn div(self, other: Self) -> f64 {
+        self.get() / other.get()
     }
 }
 
@@ -118,11 +153,19 @@ impl Div<Ratio> for f64 {
     }
 }
 
-impl Div for Ratio {
-    type Output = f64;
+impl Div<Float> for Ratio {
+    type Output = Self;
 
-    fn div(self, other: Self) -> f64 {
-        self.get() / other.get()
+    fn div(self, rhs: Float) -> Self::Output {
+        self / rhs.as_f64()
+    }
+}
+
+impl Div<Ratio> for Float {
+    type Output = Self;
+
+    fn div(self, other: Ratio) -> Self {
+        (self.as_f64() / other.get()).into()
     }
 }
 

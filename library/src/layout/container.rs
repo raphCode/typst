@@ -294,8 +294,8 @@ pub struct BlockElem {
     pub above: Spacing,
     #[internal]
     #[parse(
-        let spacing = args.named("spacing")?;
-        args.named("above")?
+        let spacing = args.find_named("spacing")?;
+        args.find_named("above")?
             .map(VElem::block_around)
             .or_else(|| spacing.map(VElem::block_spacing))
     )]
@@ -309,7 +309,7 @@ pub struct BlockElem {
     pub below: Spacing,
     #[internal]
     #[parse(
-        args.named("below")?
+        args.find_named("below")?
             .map(VElem::block_around)
             .or_else(|| spacing.map(VElem::block_spacing))
     )]

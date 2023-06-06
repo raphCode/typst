@@ -15,8 +15,8 @@ pub use typst::diag::{bail, error, At, SourceResult, StrResult};
 pub use typst::doc::*;
 #[doc(no_inline)]
 pub use typst::eval::{
-    array, cast, dict, format_str, func, Args, Array, AutoValue, Cast, Dict, FromValue,
-    Func, IntoValue, Never, NoneValue, Scope, Str, Symbol, Type, Value, Vm,
+    array, cast, dict, format_str, func, ty, Args, Array, Bool, Cast, Dict, Float,
+    FromValue, Func, Int, IntoValue, Scope, Str, Symbol, Type, Value, Vm,
 };
 #[doc(no_inline)]
 pub use typst::geom::*;

@@ -147,7 +147,7 @@ pub struct ScaleElem {
     /// The body will be mirrored horizontally if the parameter is negative.
     #[parse(
         let all = args.find()?;
-        args.named("x")?.or(all)
+        args.find_named("x")?.or(all)
     )]
     #[default(Ratio::one())]
     pub x: Ratio,
@@ -155,7 +155,7 @@ pub struct ScaleElem {
     /// The vertical scaling factor.
     ///
     /// The body will be mirrored vertically if the parameter is negative.
-    #[parse(args.named("y")?.or(all))]
+    #[parse(args.find_named("y")?.or(all))]
     #[default(Ratio::one())]
     pub y: Ratio,
 

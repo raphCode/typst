@@ -1,16 +1,4 @@
-types: |
-  To style your document, you need to work with values of different kinds: Lengths
-  specifying the size of your elements, colors for your text and shapes, and more.
-  Typst categorizes these into clearly defined _types_ and tells you where it
-  expects which type of value.
-
-  Apart from very basic types for numeric values and typical types known from
-  programming languages, Typst provides a special type for _content._ A value of
-  this type can hold anything that you can enter into your document: Text,
-  elements like headings and shapes, and style information.
-
-  In some places of Typst more specialized data types are used. Instead of listing
-  all of them here, they are explained where they are relevant.
+# Descriptions of the documentation categories.
 
 text: |
   Text styling.
@@ -153,14 +141,8 @@ calculate: |
   addition to the functions listed below, the `calc` module also defines the
   constants `pi`, `e`, `inf`, and `nan`.
 
-construct: |
-  Construction of and conversions between values of different types.
-
 data-loading: |
   Data loading from external files.
 
   These functions help you with embedding data from experiments in your
   documents.
-
-utility: |
-  Useful utility functions.

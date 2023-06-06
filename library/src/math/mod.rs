@@ -375,7 +375,7 @@ impl Outlinable for EquationElem {
 
         let numbers = self
             .counter()
-            .at(vt, self.0.location().unwrap())?
+            .at(self.0.location().unwrap(), vt)?
             .display(vt, &numbering)?;
 
         Ok(Some(supplement + numbers))

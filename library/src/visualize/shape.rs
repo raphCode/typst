@@ -185,9 +185,9 @@ pub struct SquareElem {
     /// In contrast to `size`, this can be relative to the parent container's
     /// width.
     #[parse(
-        let size = args.named::<Smart<Length>>("size")?.map(|s| s.map(Rel::from));
+        let size = args.find_named::<Smart<Length>>("size")?.map(|s| s.map(Rel::from));
         match size {
-            None => args.named("width")?,
+            None => args.find_named("width")?,
             size => size,
         }
     )]
@@ -198,7 +198,7 @@ pub struct SquareElem {
     /// In contrast to `size`, this can be relative to the parent container's
     /// height.
     #[parse(match size {
-        None => args.named("height")?,
+        None => args.find_named("height")?,
         size => size,
     })]
     pub height: Smart<Rel<Length>>,
@@ -378,10 +378,10 @@ pub struct CircleElem {
     /// width.
     #[parse(
         let size = args
-            .named::<Smart<Length>>("radius")?
+            .find_named::<Smart<Length>>("radius")?
             .map(|s| s.map(|r| 2.0 * Rel::from(r)));
         match size {
-            None => args.named("width")?,
+            None => args.find_named("width")?,
             size => size,
         }
     )]
@@ -393,7 +393,7 @@ pub struct CircleElem {
     /// In contrast to `radius`, this can be relative to the parent container's
     /// height.
     #[parse(match size {
-        None => args.named("height")?,
+        None => args.find_named("height")?,
         size => size,
     })]
     pub height: Smart<Rel<Length>>,

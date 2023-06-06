@@ -261,7 +261,7 @@ impl Show for OutlineElem {
 
             // Add the page number and linebreak.
             let page = Counter::new(CounterKey::Page)
-                .at(vt, location)?
+                .at(location, vt)?
                 .display(vt, &page_numbering)?;
 
             seq.push(page.linked(Destination::Location(location)));
@@ -352,7 +352,7 @@ impl OutlineIndent {
                     if let Some(numbering) = ancestor_outlinable.numbering() {
                         let numbers = ancestor_outlinable
                             .counter()
-                            .at(vt, ancestor.location().unwrap())?
+                            .at(ancestor.location().unwrap(), vt)?
                             .display(vt, &numbering)?;
 
                         hidden += numbers + SpaceElem::new().pack();

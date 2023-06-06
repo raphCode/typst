@@ -2,12 +2,41 @@ use std::fmt::{self, Debug, Formatter};
 
 use ecow::{eco_format, EcoVec};
 
-use super::{Array, Dict, FromValue, IntoValue, Str, Value};
+use super::{func, ty, Array, Dict, FromValue, IntoValue, Str, Value};
 use crate::diag::{bail, At, SourceResult};
 use crate::syntax::{Span, Spanned};
 use crate::util::pretty_array_like;
 
-/// Evaluated arguments to a function.
+/// Captured arguments to a function.
+///
+/// Like built-in functions, custom functions can also take a variable number of
+/// arguments. You can specify an _argument sink_ which collects all excess
+/// arguments as `..sink`. The resulting `sink` value is of the `arguments`
+/// type. It exposes methods to access the positional and named arguments and is
+/// iterable with a [for loop]($scripting/#loops). Inversely, you can spread
+/// arguments, arrays and dictionaries into a function call with the spread
+/// operator: `{func(..args)}`.
+///
+/// ## Example { #example }
+/// ```example
+/// #let format(title, ..authors) = [
+///   *#title* \
+///   _Written by #(authors
+///     .pos()
+///     .join(", ", last: " and "));._
+/// ]
+///
+/// #format("ArtosFlow", "Jane", "Joe")
+/// ```
+///
+/// Display: Arguments
+/// Category: foundations
+#[ty("args")]
+#[scope({
+    scope.define("pos", Args::pos_func());
+    scope.define("named", Args::named_func());
+    scope
+})]
 #[derive(Clone, PartialEq, Hash)]
 pub struct Args {
     /// The span of the whole argument list.
@@ -128,7 +157,7 @@ impl Args {
 
     /// Cast and remove the value for the given named argument, returning an
     /// error if the conversion fails.
-    pub fn named<T>(&mut self, name: &str) -> SourceResult<Option<T>>
+    pub fn find_named<T>(&mut self, name: &str) -> SourceResult<Option<T>>
     where
         T: FromValue<Spanned<Value>>,
     {
@@ -149,11 +178,11 @@ impl Args {
     }
 
     /// Same as named, but with fallback to find.
-    pub fn named_or_find<T>(&mut self, name: &str) -> SourceResult<Option<T>>
+    pub fn find_named_or_pos<T>(&mut self, name: &str) -> SourceResult<Option<T>>
     where
         T: FromValue<Spanned<Value>>,
     {
-        match self.named(name)? {
+        match self.find_named(name)? {
             Some(value) => Ok(Some(value)),
             None => self.find(),
         }
@@ -178,9 +207,15 @@ impl Args {
         }
         Ok(())
     }
+}
 
-    /// Extract the positional arguments as an array.
-    pub fn to_pos(&self) -> Array {
+impl Args {
+    /// Returns the captured positional arguments as an array.
+    ///
+    /// Display: Positional
+    /// Category: foundations
+    #[func(Args)]
+    pub fn pos(&self) -> Array {
         self.items
             .iter()
             .filter(|item| item.name.is_none())
@@ -188,8 +223,12 @@ impl Args {
             .collect()
     }
 
-    /// Extract the named arguments as a dictionary.
-    pub fn to_named(&self) -> Dict {
+    /// Returns the captured named arguments as a dictionary.
+    ///
+    /// Display: Named
+    /// Category: foundations
+    #[func(Args)]
+    pub fn named(&self) -> Dict {
         self.items
             .iter()
             .filter_map(|item| item.name.clone().map(|name| (name, item.value.v.clone())))

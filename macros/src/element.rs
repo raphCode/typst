@@ -369,9 +369,9 @@ fn create_pack_impl(element: &Elem) -> TokenStream {
                         keywords: #keywords,
                         docs: #docs,
                         params: ::std::vec![#(#infos),*],
-                        returns: ::typst::eval::CastInfo::Union(::std::vec![
-                            ::typst::eval::CastInfo::Type("content")
-                        ]),
+                        returns: ::typst::eval::CastInfo::Type(
+                            ::typst::eval::Type::of::<::typst::model::Content>(),
+                        ),
                         category: #category,
                         scope: #scope,
                     }),
@@ -547,7 +547,7 @@ fn create_field_parser(field: &Field) -> (TokenStream, TokenStream) {
     } else if field.positional {
         quote! { args.find()? }
     } else {
-        quote! { args.named(#name)? }
+        quote! { args.find_named(#name)? }
     };
 
     (quote! {}, value)

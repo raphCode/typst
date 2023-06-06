@@ -8,10 +8,14 @@ use ecow::{eco_vec, EcoString, EcoVec};
 
 use super::{Content, ElemFunc, Element, Selector, Vt};
 use crate::diag::{SourceResult, Trace, Tracepoint};
-use crate::eval::{cast, Args, FromValue, Func, IntoValue, Value, Vm};
+use crate::eval::{cast, ty, Args, FromValue, Func, IntoValue, Value, Vm};
 use crate::syntax::Span;
 
 /// A list of style properties.
+///
+/// Display: Styles
+/// Category: foundations
+#[ty("styles")]
 #[derive(Default, PartialEq, Clone, Hash)]
 pub struct Styles(EcoVec<Prehashed<Style>>);
 

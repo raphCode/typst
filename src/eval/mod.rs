@@ -14,15 +14,17 @@ mod str;
 mod value;
 mod args;
 mod auto;
+mod bool;
 mod datetime;
+mod float;
 mod func;
 mod int;
-mod methods;
 mod module;
 mod none;
 pub mod ops;
 mod scope;
 mod symbol;
+mod ty;
 
 #[doc(hidden)]
 pub use {
@@ -33,32 +35,35 @@ pub use {
 };
 
 #[doc(inline)]
-pub use typst_macros::{func, symbols};
+pub use typst_macros::{func, symbols, ty};
 
 pub use self::args::{Arg, Args};
 pub use self::array::{array, Array};
 pub use self::auto::AutoValue;
+pub use self::bool::Bool;
 pub use self::cast::{
     cast, Cast, CastInfo, FromValue, IntoResult, IntoValue, Never, Reflect, Variadics,
 };
 pub use self::datetime::Datetime;
 pub use self::dict::{dict, Dict};
+pub use self::float::Float;
 pub use self::func::{Func, FuncInfo, NativeFunc, Param, ParamInfo};
+pub use self::int::Int;
 pub use self::library::{set_lang_items, LangItems, Library};
-pub use self::methods::methods_on;
 pub use self::module::Module;
 pub use self::none::NoneValue;
 pub use self::scope::{Scope, Scopes};
 pub use self::str::{format_str, Regex, Str};
 pub use self::symbol::Symbol;
-pub use self::value::{Dynamic, Type, Value};
+pub use self::ty::{NativeType, Type, TypeInfo, TypeOf};
+pub use self::value::{Dynamic, Value};
 
 use std::collections::HashSet;
 use std::mem;
 use std::path::{Path, PathBuf};
 
 use comemo::{Track, Tracked, TrackedMut, Validate};
-use ecow::{EcoString, EcoVec};
+use ecow::EcoVec;
 use unicode_segmentation::UnicodeSegmentation;
 
 use self::func::{CapturesVisitor, Closure};
@@ -561,7 +566,7 @@ impl Eval for ast::Escape {
 
     #[tracing::instrument(name = "Escape::eval", skip_all)]
     fn eval(&self, _: &mut Vm) -> SourceResult<Self::Output> {
-        Ok(Value::Symbol(Symbol::new(self.get())))
+        Ok(Value::Symbol(Symbol::single(self.get())))
     }
 }
 
@@ -570,7 +575,7 @@ impl Eval for ast::Shorthand {
 
     #[tracing::instrument(name = "Shorthand::eval", skip_all)]
     fn eval(&self, _: &mut Vm) -> SourceResult<Self::Output> {
-        Ok(Value::Symbol(Symbol::new(self.get())))
+        Ok(Value::Symbol(Symbol::single(self.get())))
     }
 }
 
@@ -803,7 +808,7 @@ impl Eval for ast::Bool {
 
     #[tracing::instrument(name = "Bool::eval", skip_all)]
     fn eval(&self, _: &mut Vm) -> SourceResult<Self::Output> {
-        Ok(Value::Bool(self.get()))
+        Ok(Value::Bool(self.get().into()))
     }
 }
 
@@ -812,7 +817,7 @@ impl Eval for ast::Int {
 
     #[tracing::instrument(name = "Int::eval", skip_all)]
     fn eval(&self, _: &mut Vm) -> SourceResult<Self::Output> {
-        Ok(Value::Int(self.get()))
+        Ok(Value::Int(self.get().into()))
     }
 }
 
@@ -821,7 +826,7 @@ impl Eval for ast::Float {
 
     #[tracing::instrument(name = "Float::eval", skip_all)]
     fn eval(&self, _: &mut Vm) -> SourceResult<Self::Output> {
-        Ok(Value::Float(self.get()))
+        Ok(Value::Float(self.get().into()))
     }
 }
 
@@ -944,7 +949,7 @@ impl Eval for ast::Array {
                 ast::ArrayItem::Spread(expr) => match expr.eval(vm)? {
                     Value::None => {}
                     Value::Array(array) => vec.extend(array.into_iter()),
-                    v => bail!(expr.span(), "cannot spread {} into array", v.type_name()),
+                    v => bail!(expr.span(), "cannot spread {} into array", v.ty()),
                 },
             }
         }
@@ -971,11 +976,7 @@ impl Eval for ast::Dict {
                 ast::DictItem::Spread(expr) => match expr.eval(vm)? {
                     Value::None => {}
                     Value::Dict(dict) => map.extend(dict.into_iter()),
-                    v => bail!(
-                        expr.span(),
-                        "cannot spread {} into dictionary",
-                        v.type_name()
-                    ),
+                    v => bail!(expr.span(), "cannot spread {} into dictionary", v.ty()),
                 },
             }
         }
@@ -1038,8 +1039,8 @@ impl ast::Binary {
         let lhs = self.lhs().eval(vm)?;
 
         // Short-circuit boolean operations.
-        if (self.op() == ast::BinOp::And && lhs == Value::Bool(false))
-            || (self.op() == ast::BinOp::Or && lhs == Value::Bool(true))
+        if (self.op() == ast::BinOp::And && lhs == false.into_value())
+            || (self.op() == ast::BinOp::Or && lhs == true.into_value())
         {
             return Ok(lhs);
         }
@@ -1100,47 +1101,43 @@ impl Eval for ast::FuncCall {
         let callee_span = callee.span();
         let args = self.args();
 
-        // Try to evaluate as a method call. This is possible if the callee is a
-        // field access and does not evaluate to a module.
+        // Try to evaluate as a call to an associated function or field.
         let (callee, mut args) = if let ast::Expr::FieldAccess(access) = callee {
-            let target = access.target();
             let field = access.field();
             let field_span = field.span();
             let field = field.take();
-            let point = || Tracepoint::Call(Some(field.clone()));
-            if methods::is_mutating(&field) {
-                let args = args.eval(vm)?;
-                let target = target.access(vm)?;
 
-                // Prioritize a function's own methods (with, where) over its
-                // fields. This is fine as we define each field of a function,
-                // if it has any.
-                // ('methods_on' will be empty for Symbol and Module - their
-                // method calls always refer to their fields.)
-                if !matches!(target, Value::Symbol(_) | Value::Module(_) | Value::Func(_))
-                    || methods_on(target.type_name()).iter().any(|(m, _)| m == &field)
-                {
-                    return methods::call_mut(target, &field, args, span).trace(
-                        vm.world(),
-                        point,
-                        span,
-                    );
-                }
+            let target = access.target();
+            let target_span = target.span();
+            let target = access.target().eval(vm)?;
+            let target_ty = target.ty();
+
+            let mut args = args.eval(vm)?;
+
+            // Prioritize associated functions on the value's type (i.e.,
+            // methods) over its fields. A function call on a field is only
+            // allowed for symbols, functions, types, and modules. For
+            // dictionaries, it is not allowed because it would be ambigious
+            // (prioritizing associated functions would make an addition of a
+            // new associated function a breaking change and prioritizing fields
+            // would break associated functions for certain dictionaries).
+            if let Some(callee) = target_ty.scope().get(&field) {
+                args.items.insert(
+                    0,
+                    Arg {
+                        span: target_span,
+                        name: None,
+                        value: Spanned::new(target, target_span),
+                    },
+                );
+                (callee.clone(), args)
+            } else if matches!(
+                target,
+                Value::Symbol(_) | Value::Func(_) | Value::Type(_) | Value::Module(_)
+            ) {
                 (target.field(&field).at(field_span)?, args)
             } else {
-                let target = target.eval(vm)?;
-                let args = args.eval(vm)?;
-
-                if !matches!(target, Value::Symbol(_) | Value::Module(_) | Value::Func(_))
-                    || methods_on(target.type_name()).iter().any(|(m, _)| m == &field)
-                {
-                    return methods::call(vm, target, &field, args, span).trace(
-                        vm.world(),
-                        point,
-                        span,
-                    );
-                }
-                (target.field(&field).at(field_span)?, args)
+                bail!(field_span, "type {target_ty} has no function `{field}`");
             }
         } else {
             (callee.eval(vm)?, args.eval(vm)?)
@@ -1236,7 +1233,7 @@ impl Eval for ast::Args {
                         }));
                     }
                     Value::Args(args) => items.extend(args.items),
-                    v => bail!(expr.span(), "cannot spread {}", v.type_name()),
+                    v => bail!(expr.span(), "cannot spread {}", v.ty()),
                 },
             }
         }
@@ -1354,8 +1351,8 @@ impl ast::Pattern {
             match p {
                 ast::DestructuringKind::Normal(ast::Expr::Ident(ident)) => {
                     let v = dict
-                        .at(&ident, None)
-                        .map_err(|_| "destructuring key not found in dictionary")
+                        .get(&ident)
+                        .ok_or("destructuring key not found in dictionary")
                         .at(ident.span())?;
                     f(vm, ast::Expr::Ident(ident.clone()), v.clone())?;
                     used.insert(ident.take());
@@ -1364,8 +1361,8 @@ impl ast::Pattern {
                 ast::DestructuringKind::Named(named) => {
                     let name = named.name();
                     let v = dict
-                        .at(&name, None)
-                        .map_err(|_| "destructuring key not found in dictionary")
+                        .get(&name)
+                        .ok_or("destructuring key not found in dictionary")
                         .at(name.span())?;
                     f(vm, named.expr(), v.clone())?;
                     used.insert(name.take());
@@ -1405,7 +1402,7 @@ impl ast::Pattern {
             ast::Pattern::Destructuring(destruct) => match value {
                 Value::Array(value) => self.destruct_array(vm, value, f, destruct),
                 Value::Dict(value) => self.destruct_dict(vm, value, f, destruct),
-                _ => bail!(self.span(), "cannot destructure {}", value.type_name()),
+                _ => bail!(self.span(), "cannot destructure {}", value.ty()),
             },
         }
     }
@@ -1644,10 +1641,10 @@ impl Eval for ast::ForLoop {
                 iter!(for pattern in array);
             }
             (ast::Pattern::Normal(_), _) => {
-                bail!(self.iter().span(), "cannot loop over {}", iter.type_name());
+                bail!(self.iter().span(), "cannot loop over {}", iter.ty());
             }
             (_, _) => {
-                bail!(pattern.span(), "cannot destructure values of {}", iter.type_name())
+                bail!(pattern.span(), "cannot destructure values of {}", iter.ty())
             }
         }
 
@@ -1659,42 +1656,6 @@ impl Eval for ast::ForLoop {
     }
 }
 
-/// Applies imports from `import` to the current scope.
-fn apply_imports<V: IntoValue>(
-    imports: Option<ast::Imports>,
-    vm: &mut Vm,
-    source_value: V,
-    name: impl Fn(&V) -> EcoString,
-    scope: impl Fn(&V) -> &Scope,
-) -> SourceResult<()> {
-    match imports {
-        None => {
-            vm.scopes.top.define(name(&source_value), source_value);
-        }
-        Some(ast::Imports::Wildcard) => {
-            for (var, value) in scope(&source_value).iter() {
-                vm.scopes.top.define(var.clone(), value.clone());
-            }
-        }
-        Some(ast::Imports::Items(idents)) => {
-            let mut errors = vec![];
-            let scope = scope(&source_value);
-            for ident in idents {
-                if let Some(value) = scope.get(&ident) {
-                    vm.define(ident, value.clone());
-                } else {
-                    errors.push(error!(ident.span(), "unresolved import"));
-                }
-            }
-            if !errors.is_empty() {
-                return Err(Box::new(errors));
-            }
-        }
-    }
-
-    Ok(())
-}
-
 impl Eval for ast::ModuleImport {
     type Output = Value;
 
@@ -1702,26 +1663,47 @@ impl Eval for ast::ModuleImport {
     fn eval(&self, vm: &mut Vm) -> SourceResult<Self::Output> {
         let span = self.source().span();
         let source = self.source().eval(vm)?;
-        if let Value::Func(func) = source {
-            if func.info().is_none() {
-                bail!(span, "cannot import from user-defined functions");
+        let module;
+
+        let Some(imports) = self.imports() else {
+            module = import(vm, source, span, false)?;
+            vm.scopes.top.define(module.name().clone(), module);
+            return Ok(Value::None)
+        };
+
+        let scope = match &source {
+            Value::Func(func) => {
+                let Some(info) = func.info() else {
+                    bail!(span, "cannot import from user-defined functions");
+                };
+                &info.scope
             }
-            apply_imports(
-                self.imports(),
-                vm,
-                func,
-                |func| func.info().unwrap().name.into(),
-                |func| &func.info().unwrap().scope,
-            )?;
-        } else {
-            let module = import(vm, source, span, true)?;
-            apply_imports(
-                self.imports(),
-                vm,
-                module,
-                |module| module.name().clone(),
-                |module| module.scope(),
-            )?;
+            Value::Type(ty) => &ty.info().scope,
+            _ => {
+                module = import(vm, source, span, true)?;
+                module.scope()
+            }
+        };
+
+        match imports {
+            ast::Imports::Wildcard => {
+                for (var, value) in scope.iter() {
+                    vm.scopes.top.define(var.clone(), value.clone());
+                }
+            }
+            ast::Imports::Items(idents) => {
+                let mut errors = vec![];
+                for ident in idents {
+                    if let Some(value) = scope.get(&ident) {
+                        vm.define(ident, value.clone());
+                    } else {
+                        errors.push(error!(ident.span(), "unresolved import"));
+                    }
+                }
+                if !errors.is_empty() {
+                    return Err(Box::new(errors));
+                }
+            }
         }
 
         Ok(Value::None)
@@ -1745,16 +1727,16 @@ fn import(
     vm: &mut Vm,
     source: Value,
     span: Span,
-    accept_functions: bool,
+    allow_scopes: bool,
 ) -> SourceResult<Module> {
     let path = match source {
         Value::Str(path) => path,
         Value::Module(module) => return Ok(module),
         v => {
-            if accept_functions {
-                bail!(span, "expected path, module or function, found {}", v.type_name())
+            if allow_scopes {
+                bail!(span, "expected path, module, function, or type, found {}", v.ty())
             } else {
-                bail!(span, "expected path or module, found {}", v.type_name())
+                bail!(span, "expected path or module, found {}", v.ty())
             }
         }
     };
@@ -1861,28 +1843,17 @@ impl ast::FieldAccess {
     fn access_dict<'a>(&self, vm: &'a mut Vm) -> SourceResult<&'a mut Dict> {
         match self.target().access(vm)? {
             Value::Dict(dict) => Ok(dict),
-            value => bail!(
-                self.target().span(),
-                "expected dictionary, found {}",
-                value.type_name(),
-            ),
+            value => {
+                bail!(self.target().span(), "expected dictionary, found {}", value.ty())
+            }
         }
     }
 }
 
 impl Access for ast::FuncCall {
     fn access<'a>(&self, vm: &'a mut Vm) -> SourceResult<&'a mut Value> {
-        if let ast::Expr::FieldAccess(access) = self.callee() {
-            let method = access.field().take();
-            if methods::is_accessor(&method) {
-                let span = self.span();
-                let world = vm.world();
-                let args = self.args().eval(vm)?;
-                let value = access.target().access(vm)?;
-                let result = methods::call_access(value, &method, args, span);
-                let point = || Tracepoint::Call(Some(method.clone()));
-                return result.trace(world, point, span);
-            }
+        if let ast::Expr::FieldAccess(_access) = self.callee() {
+            bail!(self.span(), "field access is not yet implemented") // todo!()
         }
 
         let _ = self.eval(vm)?;

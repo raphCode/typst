@@ -60,8 +60,8 @@ description: |
   - Fixed bug with trailing placeholders in destructuring patterns
   - Fixed bug with underscore in parameter destructuring
   - Fixed crash with nested patterns and when hovering over an invalid pattern
-  - Better error messages when casting to an [integer]($func/int) or
-    [float]($func/float) fails
+  - Better error messages when casting to an [integer]($type/int) or
+    [float]($type/float) fails
 
 - Text and Layout
   - Implemented sophisticated CJK punctuation adjustment
@@ -147,7 +147,7 @@ description: |
   - Locations are now a valid kind of selector
   - Added a few symbols for algebra
   - Added Spanish smart quote support
-  - Added [`selector`]($func/selector) function to turn a selector-like value
+  - Added [`selector`]($type/selector) function to turn a selector-like value
     into a selector on which combinator methods can be called
   - Improved some error messages
   - The outline and bibliography headings can now be styled with show-set rules
@@ -221,7 +221,7 @@ description: |
   - Fixed supplements of references to headings
   - Fixed syntax highlighting of identifiers in certain scenarios
   - [Ratios]($type/ratio) can now be multiplied with more types and be converted
-    to [floats]($type/float) with the [`float`]($func/float) function
+    to [floats]($type/float) with the [`float`]($type/float) function
 
 <contributors from="v0.1.0" to="v0.2.0" />
 
@@ -232,7 +232,7 @@ description: |
     - `typst watch file.typ` or `typst w file.typ` to compile and watch
     - `typst fonts` to list all fonts
   - Manual counters now start at zero. Read the "How to step" section
-    [here]($func/counter) for more details
+    [here]($type/counter) for more details
   - The [bibliography styles]($func/bibliography.style)
     `{"author-date"}` and `{"author-title"}` were renamed to
     `{"chicago-author-date"}` and `{"chicago-author-title"}`
@@ -272,7 +272,7 @@ description: |
   - Added numbering support for Hebrew
   - Added support for [integers]($type/integer) with base 2, 8, and 16
   - Added symbols for double bracket and laplace operator
-  - The [`link`]($func/link) function now accepts [labels]($func/label)
+  - The [`link`]($func/link) function now accepts [labels]($type/label)
   - The link syntax now allows more characters
   - Improved justification of Japanese and Chinese text
   - Calculation functions behave more consistently w.r.t to non-real results
@@ -286,7 +286,7 @@ description: |
   - Fixed invalid parsing of language tag in raw block with a single backtick
   - Fixed bugs with displaying counters and state
   - Fixed crash related to page counter
-  - Fixed crash when [`symbol`]($func/symbol) function was called without
+  - Fixed crash when [`symbol`]($type/symbol) function was called without
     arguments
   - Fixed crash in bibliography generation
   - Fixed access to label of certain content elements
@@ -347,14 +347,14 @@ description: |
     - `[$ A = pi r^2 $ <area>]`
 
 - Introspection system for interactions between different parts of the document
-  - [`counter`]($func/counter) function
+  - [`counter`]($type/counter) function
     - Access and modify counters for pages, headings, figures, and equations
     - Define and use your own custom counters
     - Time travel: Find out what the counter value was or will be at some other
       point in the document (e.g. when you're building a list of figures, you
       can determine the value of the figure counter at any given figure).
     - Counters count in layout order and not in code order
-  - [`state`]($func/state) function
+  - [`state`]($type/state) function
     - Manage arbitrary state across your document
     - Time travel: Find out the value of your state at any position in the
       document
@@ -397,7 +397,7 @@ description: |
   - The page function's [`header`]($func/page.header) and
     [`footer`]($func/page.footer) parameters do not take functions anymore. If
     you want to customize them based on the page number, use the new
-    [`numbering`]($func/page.numbering) parameter or [`counter`]($func/counter)
+    [`numbering`]($func/page.numbering) parameter or [`counter`]($type/counter)
     function instead.
   - Added [`footer-descent`]($func/page.footer-descent) and
     [`header-ascent`]($func/page.header-ascent) parameters

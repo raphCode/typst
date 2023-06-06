@@ -4,7 +4,7 @@ use icu_provider_adapters::fork::ForkByKeyProvider;
 use icu_provider_blob::BlobDataProvider;
 use icu_segmenter::{LineBreakIteratorUtf8, LineSegmenter};
 use once_cell::sync::Lazy;
-use typst::eval::Tracer;
+use typst::eval::{Cast, Tracer};
 use unicode_bidi::{BidiInfo, Level as BidiLevel};
 use unicode_script::{Script, UnicodeScript};
 

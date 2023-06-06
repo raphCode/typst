@@ -1,6 +1,20 @@
 use super::*;
 
-/// An angle.
+/// An angle describing a rotation.
+///
+/// Typst supports the following angular units:
+///
+/// - Degrees: `{180deg}`
+/// - Radians: `{3.14rad}`
+///
+/// ## Example { #example }
+/// ```example
+/// #rotate(10deg)[Hello there!]
+/// ```
+///
+/// Display: Angle
+/// Category: layout
+#[ty("angle")]
 #[derive(Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Angle(Scalar);
 
@@ -121,11 +135,19 @@ impl Mul<Angle> for f64 {
     }
 }
 
-impl Div<f64> for Angle {
+impl Mul<Float> for Angle {
     type Output = Self;
 
-    fn div(self, other: f64) -> Self {
-        Self(self.0 / other)
+    fn mul(self, rhs: Float) -> Self::Output {
+        self * rhs.as_f64()
+    }
+}
+
+impl Mul<Angle> for Float {
+    type Output = Angle;
+
+    fn mul(self, other: Angle) -> Angle {
+        other * self.as_f64()
     }
 }
 
@@ -137,6 +159,21 @@ impl Div for Angle {
     }
 }
 
+impl Div<f64> for Angle {
+    type Output = Self;
+
+    fn div(self, other: f64) -> Self {
+        Self(self.0 / other)
+    }
+}
+
+impl Div<Float> for Angle {
+    type Output = Self;
+
+    fn div(self, other: Float) -> Self {
+        Self(self.0 / other.as_f64())
+    }
+}
 assign_impl!(Angle += Angle);
 assign_impl!(Angle -= Angle);
 assign_impl!(Angle *= f64);

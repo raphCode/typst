@@ -196,108 +196,44 @@ use crate::prelude::*;
 ///   so the final value is `{(6,)}`.
 ///
 /// ## Other kinds of state { #other-state }
-/// The `counter` function is closely related to [state]($func/state) function.
-/// Read its documentation for more details on state management in Typst and
-/// why it doesn't just use normal variables for counters.
-///
-/// ## Methods
-/// ### display()
-/// Display the value of the counter.
-///
-/// - numbering: string or function (positional)
-///   A [numbering pattern or a function]($func/numbering), which specifies how
-///   to display the counter. If given a function, that function receives each
-///   number of the counter as a separate argument. If the amount of numbers
-///   varies, e.g. for the heading argument, you can use an
-///   [argument sink]($type/arguments).
-///
-///   If this is omitted, displays the counter with the numbering style for the
-///   counted element or with the pattern `{"1.1"}` if no such style exists.
-///
-/// - both: boolean (named)
-///   If enabled, displays the current and final top-level count together. Both
-///   can be styled through a single numbering pattern. This is used by the page
-///   numbering property to display the current and total number of pages when a
-///   pattern like `{"1 / 1"}` is given.
-///
-/// - returns: content
-///
-/// ### step()
-/// Increase the value of the counter by one.
-///
-/// The update will be in effect at the position where the returned content is
-/// inserted into the document. If you don't put the output into the document,
-/// nothing happens! This would be the case, for example, if you write
-/// `{let _ = counter(page).step()}`. Counter updates are always applied in
-/// layout order and in that case, Typst wouldn't know when to step the counter.
-///
-/// - level: integer (named)
-///   The depth at which to step the counter. Defaults to `{1}`.
-///
-/// - returns: content
-///
-/// ### update()
-/// Update the value of the counter.
-///
-/// Just like with `step`, the update only occurs if you put the resulting
-/// content into the document.
-///
-/// - value: integer or array or function (positional, required)
-///   If given an integer or array of integers, sets the counter to that value.
-///   If given a function, that function receives the previous counter value
-///   (with each number as a separate argument) and has to return the new
-///   value (integer or array).
-///
-/// - returns: content
-///
-/// ### at()
-/// Get the value of the counter at the given location. Always returns an
-/// array of integers, even if the counter has just one number.
-///
-/// - location: location (positional, required)
-///   The location at which the counter value should be retrieved. A suitable
-///   location can be retrieved from [`locate`]($func/locate) or
-///   [`query`]($func/query).
-///
-/// - returns: array
-///
-/// ### final()
-/// Get the value of the counter at the end of the document. Always returns an
-/// array of integers, even if the counter has just one number.
-///
-/// - location: location (positional, required)
-///   Can be any location. Why is it required then? Typst has to evaluate parts
-///   of your code multiple times to determine all counter values. By only
-///   allowing this method within [`locate`]($func/locate) calls, the amount of
-///   code that can depend on the method's result is reduced. If you could call
-///   `final` directly at the top level of a module, the evaluation of the whole
-///   module and its exports could depend on the counter's value.
-///
-/// - returns: array
+/// The `counter` type is closely related to [state]($type/state) type. Read its
+/// documentation for more details on state management in Typst and why it
+/// doesn't just use normal variables for counters.
 ///
 /// Display: Counter
 /// Category: meta
-#[func]
-pub fn counter(
-    /// The key that identifies this counter.
-    ///
-    /// - If it is a string, creates a custom counter that is only affected by
-    ///   manual updates,
-    /// - If this is a `{<label>}`, counts through all elements with that label,
-    /// - If this is an element function or selector, counts through its elements,
-    /// - If this is the [`page`]($func/page) function, counts through pages.
-    key: CounterKey,
-) -> Counter {
-    Counter::new(key)
-}
-
-/// Counts through pages, elements, and more.
+#[ty("counter")]
+#[constructor(Counter::new_func())]
+#[scope({
+    scope.define("display", Counter::display_func());
+    scope.define("step", Counter::step_func());
+    scope.define("update", Counter::update_func());
+    scope.define("at", Counter::at_func());
+    scope.define("final", Counter::final_func());
+    scope
+})]
 #[derive(Clone, PartialEq, Hash)]
 pub struct Counter(CounterKey);
 
 impl Counter {
-    /// Create a new counter from a key.
-    pub fn new(key: CounterKey) -> Self {
+    /// Create a new counter identified by a key.
+    ///
+    /// Display: Construct
+    /// Category: meta
+    #[func(Counter)]
+    pub fn new(
+        /// The key that identifies this counter.
+        ///
+        /// - If it is a string, creates a custom counter that is only affected
+        ///   by manual updates,
+        /// - If this is a `{<label>}`, counts through all elements with that
+        ///   label,
+        /// - If this is an element function or selector, counts through its
+        ///   elements,
+        /// - If this is the [`page`]($func/page) function, counts through
+        ///   pages.
+        key: CounterKey,
+    ) -> Counter {
         Self(key)
     }
 
@@ -306,42 +242,96 @@ impl Counter {
         Self::new(CounterKey::Selector(Selector::Elem(func, None)))
     }
 
-    /// Call a method on counter.
-    #[tracing::instrument(skip(vm))]
-    pub fn call_method(
+    /// Displays the current value of the counter.
+    ///
+    /// Display: Display
+    /// Category: meta
+    #[func(Counter)]
+    pub fn display(
         self,
-        vm: &mut Vm,
-        method: &str,
-        mut args: Args,
-        span: Span,
-    ) -> SourceResult<Value> {
-        let value = match method {
-            "display" => self
-                .display(args.eat()?, args.named("both")?.unwrap_or(false))
-                .into_value(),
-            "step" => self
-                .update(CounterUpdate::Step(
-                    args.named("level")?.unwrap_or(NonZeroUsize::ONE),
-                ))
-                .into_value(),
-            "update" => self.update(args.expect("value or function")?).into_value(),
-            "at" => self.at(&mut vm.vt, args.expect("location")?)?.into_value(),
-            "final" => self.final_(&mut vm.vt, args.expect("location")?)?.into_value(),
-            _ => bail!(span, "type counter has no method `{}`", method),
-        };
-        args.finish()?;
-        Ok(value)
-    }
-
-    /// Display the current value of the counter.
-    pub fn display(self, numbering: Option<Numbering>, both: bool) -> Content {
+        /// A [numbering pattern or a function]($func/numbering), which
+        /// specifies how to display the counter. If given a function, that
+        /// function receives each number of the counter as a separate argument.
+        /// If the amount of numbers varies, e.g. for the heading argument, you
+        /// can use an [argument sink]($type/arguments).
+        ///
+        /// If this is omitted, displays the counter with the numbering style
+        /// for the counted element or with the pattern `{"1.1"}` if no such
+        /// style exists.
+        #[default]
+        numbering: Option<Numbering>,
+        /// If enabled, displays the current and final top-level count together.
+        /// Both can be styled through a single numbering pattern. This is used
+        /// by the page numbering property to display the current and total
+        /// number of pages when a pattern like `{"1 / 1"}` is given.
+        #[named]
+        #[default(false)]
+        both: bool,
+    ) -> Content {
         DisplayElem::new(self, numbering, both).pack()
     }
 
-    /// Get the value of the state at the given location.
-    pub fn at(&self, vt: &mut Vt, location: Location) -> SourceResult<CounterState> {
+    /// Increases the value of the counter by one.
+    ///
+    /// The update will be in effect at the position where the returned content
+    /// is inserted into the document. If you don't put the output into the
+    /// document, nothing happens! This would be the case, for example, if you
+    /// write `{let _ = counter(page).step()}`. Counter updates are always
+    /// applied in layout order and in that case, Typst wouldn't know when to
+    /// step the counter.
+    ///
+    /// Display: Step
+    /// Category: meta
+    #[func(Counter)]
+    pub fn step(
+        self,
+        /// The depth at which to step the counter. Defaults to `{1}`.
+        #[named]
+        #[default(NonZeroUsize::ONE)]
+        level: NonZeroUsize,
+    ) -> Content {
+        self.update(CounterUpdate::Step(level))
+    }
+
+    /// Updates the value of the counter.
+    ///
+    /// Just like with `step`, the update only occurs if you put the resulting
+    /// content into the document.
+    ///
+    /// Display: Update
+    /// Category: meta
+    #[func(Counter)]
+    pub fn update(
+        self,
+        /// If given an integer or array of integers, sets the counter to that
+        /// value. If given a function, that function receives the previous
+        /// counter value (with each number as a separate argument) and has to
+        /// return the new value (integer or array).
+        update: CounterUpdate,
+    ) -> Content {
+        UpdateElem::new(self, update).pack()
+    }
+
+    /// Gets the value of the counter at the given location. Always returns an
+    /// array of integers, even if the counter has just one number.
+    ///
+    /// Display: At
+    /// Category: meta
+    #[func(Counter)]
+    pub fn at(
+        &self,
+        /// The location at which the counter value should be retrieved. A
+        /// suitable location can be retrieved from [`locate`]($func/locate) or
+        /// [`query`]($func/query).
+        location: Location,
+        /// The virtual typesetter.
+        vt: &mut Vt,
+    ) -> SourceResult<CounterState> {
         let sequence = self.sequence(vt)?;
-        let offset = vt.introspector.query(&self.selector().before(location, true)).len();
+        let offset = vt
+            .introspector
+            .query(&self.selector().before(location.into(), true))
+            .len();
         let (mut state, page) = sequence[offset].clone();
         if self.is_page() {
             let delta = vt.introspector.page(location).get().saturating_sub(page.get());
@@ -351,8 +341,26 @@ impl Counter {
         Ok(state)
     }
 
-    /// Get the value of the state at the final location.
-    pub fn final_(&self, vt: &mut Vt, _: Location) -> SourceResult<CounterState> {
+    /// Gets the value of the counter at the end of the document. Always returns
+    /// an array of integers, even if the counter has just one number.
+    ///
+    /// Display: Final
+    /// Category: meta
+    #[func(Counter)]
+    pub fn final_(
+        &self,
+        /// Can be any location. Why is it required then? Typst has to evaluate
+        /// parts of your code multiple times to determine all counter values.
+        /// By only allowing this method within [`locate`]($func/locate) calls,
+        /// the amount of code that can depend on the method's result is
+        /// reduced. If you could call `final` directly at the top level of a
+        /// module, the evaluation of the whole module and its exports could
+        /// depend on the counter's value.
+        location: Location,
+        /// The virtual typesetter.
+        vt: &mut Vt,
+    ) -> SourceResult<CounterState> {
+        let _ = location;
         let sequence = self.sequence(vt)?;
         let (mut state, page) = sequence.last().unwrap().clone();
         if self.is_page() {
@@ -362,12 +370,12 @@ impl Counter {
         Ok(state)
     }
 
-    /// Get the current and final value of the state combined in one state.
-    pub fn both(&self, vt: &mut Vt, location: Location) -> SourceResult<CounterState> {
+    /// Gets the current and final value of the state combined in one state.
+    pub fn both(&self, location: Location, vt: &mut Vt) -> SourceResult<CounterState> {
         let sequence = self.sequence(vt)?;
         let offset = vt
             .introspector
-            .query(&Selector::before(self.selector(), location, true))
+            .query(&self.selector().before(location.into(), true))
             .len();
         let (mut at_state, at_page) = sequence[offset].clone();
         let (mut final_state, final_page) = sequence.last().unwrap().clone();
@@ -382,12 +390,7 @@ impl Counter {
         Ok(CounterState(smallvec![at_state.first(), final_state.first()]))
     }
 
-    /// Produce content that performs a state update.
-    pub fn update(self, update: CounterUpdate) -> Content {
-        UpdateElem::new(self, update).pack()
-    }
-
-    /// Produce the whole sequence of counter states.
+    /// Produces the whole sequence of counter states.
     ///
     /// This has to happen just once for all counters, cutting down the number
     /// of counter updates from quadratic to linear.
@@ -476,7 +479,7 @@ impl Debug for Counter {
 }
 
 cast! {
-    type Counter: "counter",
+    type Counter,
 }
 
 /// Identifies a counter.
@@ -516,6 +519,10 @@ impl Debug for CounterKey {
 }
 
 /// An update to perform on a counter.
+///
+/// Display: Counter Update
+/// Category: meta
+#[ty("counter-update")]
 #[derive(Clone, PartialEq, Hash)]
 pub enum CounterUpdate {
     /// Set the counter to the specified state.
@@ -533,7 +540,7 @@ impl Debug for CounterUpdate {
 }
 
 cast! {
-    type CounterUpdate: "counter update",
+    type CounterUpdate,
     v: CounterState => Self::Set(v),
     v: Func => Self::Func(v),
 }
@@ -644,9 +651,9 @@ impl Show for DisplayElem {
             .unwrap_or_else(|| NumberingPattern::from_str("1.1").unwrap().into());
 
         let state = if self.both() {
-            counter.both(vt, location)?
+            counter.both(location, vt)?
         } else {
-            counter.at(vt, location)?
+            counter.at(location, vt)?
         };
         state.display(vt, &numbering)
     }

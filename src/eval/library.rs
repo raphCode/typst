@@ -6,12 +6,11 @@ use comemo::Tracked;
 use ecow::EcoString;
 use once_cell::sync::OnceCell;
 
-use super::{Args, Dynamic, Module, Value, Vm};
+use super::Module;
 use crate::diag::SourceResult;
 use crate::doc::Document;
 use crate::geom::{Abs, Dir};
 use crate::model::{Content, ElemFunc, Introspector, Label, StyleChain, Styles, Vt};
-use crate::syntax::Span;
 use crate::util::hash128;
 use crate::World;
 
@@ -105,14 +104,6 @@ pub struct LangItems {
     pub math_frac: fn(num: Content, denom: Content) -> Content,
     /// A root in math: `√x`, `∛x` or `∜x`.
     pub math_root: fn(index: Option<Content>, radicand: Content) -> Content,
-    /// Dispatch a method on a library value.
-    pub library_method: fn(
-        vm: &mut Vm,
-        dynamic: &Dynamic,
-        method: &str,
-        args: Args,
-        span: Span,
-    ) -> SourceResult<Value>,
 }
 
 impl Debug for LangItems {
@@ -152,7 +143,6 @@ impl Hash for LangItems {
         self.math_accent.hash(state);
         self.math_frac.hash(state);
         self.math_root.hash(state);
-        (self.library_method as usize).hash(state);
     }
 }
 

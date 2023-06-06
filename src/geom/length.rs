@@ -2,8 +2,24 @@ use super::*;
 
 /// A size or distance, possibly expressed with contextual units.
 ///
-/// Currently supports absolute and font-relative units, but support could quite
-/// easily be extended to other units.
+/// Typst supports the following length units:
+///
+/// - Points: `{72pt}`
+/// - Millimeters: `{254mm}`
+/// - Centimeters: `{2.54cm}`
+/// - Inches: `{1in}`
+/// - Relative to font size: `{2.5em}`
+///
+/// ## Example { #example }
+/// ```example
+/// #rect(width: 20pt)
+/// #rect(width: 2em)
+/// #rect(width: 1in)
+/// ```
+///
+/// Display: Length
+/// Category: layout
+#[ty("length")]
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Length {
     /// The absolute part.
@@ -106,11 +122,43 @@ impl Mul<f64> for Length {
     }
 }
 
+impl Mul<Length> for f64 {
+    type Output = Length;
+
+    fn mul(self, rhs: Length) -> Self::Output {
+        rhs * self
+    }
+}
+
+impl Mul<Float> for Length {
+    type Output = Self;
+
+    fn mul(self, rhs: Float) -> Self::Output {
+        self * rhs.as_f64()
+    }
+}
+
+impl Mul<Length> for Float {
+    type Output = Length;
+
+    fn mul(self, rhs: Length) -> Self::Output {
+        rhs * self.as_f64()
+    }
+}
+
 impl Div<f64> for Length {
     type Output = Self;
 
     fn div(self, rhs: f64) -> Self::Output {
         Self { abs: self.abs / rhs, em: self.em / rhs }
+    }
+}
+
+impl Div<Float> for Length {
+    type Output = Self;
+
+    fn div(self, rhs: Float) -> Self::Output {
+        self / rhs.as_f64()
     }
 }
 

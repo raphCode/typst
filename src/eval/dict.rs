@@ -4,8 +4,9 @@ use std::ops::{Add, AddAssign};
 use std::sync::Arc;
 
 use ecow::{eco_format, EcoString};
+use indexmap::IndexMap;
 
-use super::{array, Array, Str, Value};
+use super::{array, func, ty, Array, Str, Value};
 use crate::diag::StrResult;
 use crate::syntax::is_ident;
 use crate::util::{pretty_array_like, separated_list, ArcExt};
@@ -17,7 +18,7 @@ macro_rules! __dict {
     ($($key:expr => $value:expr),* $(,)?) => {{
         #[allow(unused_mut)]
         let mut map = $crate::eval::IndexMap::new();
-        $(map.insert($key.into(), $crate::eval::IntoValue::into_value($value));)*
+        $(map.insert($key.into(), ::typst::eval::IntoValue::into_value($value));)*
         $crate::eval::Dict::from(map)
     }};
 }
@@ -25,10 +26,55 @@ macro_rules! __dict {
 #[doc(inline)]
 pub use crate::__dict as dict;
 
-#[doc(inline)]
-pub use indexmap::IndexMap;
-
-/// A reference-counted dictionary with value semantics.
+/// A map from string keys to values.
+///
+/// You can construct a dictionary by enclosing comma-separated `key: value`
+/// pairs in parentheses. The values do not have to be of the same type. Since
+/// empty parentheses already yield an empty array, you have to use the special
+/// `(:)` syntax to create an empty dictionary.
+///
+/// A dictionary is conceptually similar to an array, but it is indexed by
+/// strings instead of integers. You can access and create dictionary entries
+/// with the `.at()` method. If you know the key statically, you can
+/// alternatively use [field access notation]($scripting/#fields) (`.key`) to
+/// access the value. Dictionaries can be added with the `+` operator and
+/// [joined together]($scripting/#blocks). To check whether a key is present in
+/// the dictionary, use the `in` keyword.
+///
+/// You can iterate over the pairs in a dictionary using a [for
+/// loop]($scripting/#loops). This will iterate in the order the pairs were
+/// inserted / declared.
+///
+/// ## Example { #example }
+/// ```example
+/// #let dict = (
+///   name: "Typst",
+///   born: 2019,
+/// )
+///
+/// #dict.name \
+/// #(dict.launch = 20)
+/// #dict.len() \
+/// #dict.keys() \
+/// #dict.values() \
+/// #dict.at("born") \
+/// #dict.insert("city", "Berlin ")
+/// #("name" in dict)
+/// ```
+///
+/// Display: Dictionary
+/// Category: foundations
+#[ty("dict")]
+#[scope({
+    scope.define("len", Dict::len_func());
+    scope.define("at", Dict::at_func());
+    scope.define("insert", Dict::insert_func());
+    scope.define("remove", Dict::remove_func());
+    scope.define("keys", Dict::keys_func());
+    scope.define("values", Dict::values_func());
+    scope.define("pairs", Dict::pairs_func());
+    scope
+})]
 #[derive(Default, Clone, PartialEq)]
 pub struct Dict(Arc<IndexMap<Str, Value>>);
 
@@ -43,25 +89,9 @@ impl Dict {
         self.0.is_empty()
     }
 
-    /// The number of pairs in the dictionary.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Borrow the value the given `key` maps to,
-    pub fn at<'a>(
-        &'a self,
-        key: &str,
-        default: Option<&'a Value>,
-    ) -> StrResult<&'a Value> {
-        self.0.get(key).or(default).ok_or_else(|| missing_key_no_default(key))
-    }
-
-    /// Mutably borrow the value the given `key` maps to.
-    pub fn at_mut(&mut self, key: &str) -> StrResult<&mut Value> {
-        Arc::make_mut(&mut self.0)
-            .get_mut(key)
-            .ok_or_else(|| missing_key_no_default(key))
+    /// Get the value for the specified key.
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.0.get(key)
     }
 
     /// Remove the value if the dictionary contains the given key.
@@ -76,19 +106,6 @@ impl Dict {
         self.0.contains_key(key)
     }
 
-    /// Insert a mapping from the given `key` to the given `value`.
-    pub fn insert(&mut self, key: Str, value: Value) {
-        Arc::make_mut(&mut self.0).insert(key, value);
-    }
-
-    /// Remove a mapping by `key` and return the value.
-    pub fn remove(&mut self, key: &str) -> StrResult<Value> {
-        match Arc::make_mut(&mut self.0).shift_remove(key) {
-            Some(value) => Ok(value),
-            None => Err(missing_key(key)),
-        }
-    }
-
     /// Clear the dictionary.
     pub fn clear(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
@@ -96,25 +113,6 @@ impl Dict {
         } else {
             *self = Self::new();
         }
-    }
-
-    /// Return the keys of the dictionary as an array.
-    pub fn keys(&self) -> Array {
-        self.0.keys().cloned().map(Value::Str).collect()
-    }
-
-    /// Return the values of the dictionary as an array.
-    pub fn values(&self) -> Array {
-        self.0.values().cloned().collect()
-    }
-
-    /// Return the values of the dictionary as an array of pairs (arrays of
-    /// length two).
-    pub fn pairs(&self) -> Array {
-        self.0
-            .iter()
-            .map(|(k, v)| Value::Array(array![k.clone(), v.clone()]))
-            .collect()
     }
 
     /// Iterate over pairs of references to the contained keys and values.
@@ -131,6 +129,107 @@ impl Dict {
             return Err(msg.into());
         }
         Ok(())
+    }
+}
+
+impl Dict {
+    /// The number of pairs in the dictionary.
+    ///
+    /// Display: Length
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns the value associated with the specified key in the dictionary.
+    /// May be used on the left-hand side of an assignment if the key is already
+    /// present in the dictionary. Returns the default value if the key is not
+    /// part of the dictionary or fails with an error if no default value was
+    /// specified.
+    ///
+    /// Display: At
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn at(
+        &self,
+        /// The key at which to retrieve the item.
+        key: Str,
+        /// A default value to return if the key is not part of the dictionary.
+        #[named]
+        default: Option<Value>,
+    ) -> StrResult<Value> {
+        self.0
+            .get(&key)
+            .cloned()
+            .or(default)
+            .ok_or_else(|| missing_key_no_default(&key))
+    }
+
+    /// Mutably borrow the value the given `key` maps to.
+    pub fn at_mut(&mut self, key: &str) -> StrResult<&mut Value> {
+        Arc::make_mut(&mut self.0)
+            .get_mut(key)
+            .ok_or_else(|| missing_key_no_default(key))
+    }
+
+    /// Insert a new pair into the dictionary and return the value. If the
+    /// dictionary already contains this key, the value is updated.
+    ///
+    /// Display: Insert
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn insert(
+        &mut self,
+        /// The key of the pair that should be inserted.
+        key: Str,
+        /// The value of the pair that should be inserted.
+        value: Value,
+    ) {
+        Arc::make_mut(&mut self.0).insert(key, value);
+    }
+
+    /// Remove a pair from the dictionary by key and return the value.
+    ///
+    /// Display: Remove
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn remove(&mut self, key: Str) -> StrResult<Value> {
+        match Arc::make_mut(&mut self.0).shift_remove(&key) {
+            Some(value) => Ok(value),
+            None => Err(missing_key(&key)),
+        }
+    }
+
+    /// Returns the keys of the dictionary as an array in insertion order.
+    ///
+    /// Display: Keys
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn keys(&self) -> Array {
+        self.0.keys().cloned().map(Value::Str).collect()
+    }
+
+    /// Returns the values of the dictionary as an array in insertion order.
+    ///
+    /// Display: Values
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn values(&self) -> Array {
+        self.0.values().cloned().collect()
+    }
+
+    /// Returns the keys and values of the dictionary as an array of pairs. Each
+    /// pair is represented as an array of length two.
+    ///
+    /// Display: Pairs
+    /// Category: foundations
+    #[func(Dict)]
+    pub fn pairs(&self) -> Array {
+        self.0
+            .iter()
+            .map(|(k, v)| Value::Array(array![k.clone(), v.clone()]))
+            .collect()
     }
 }
 

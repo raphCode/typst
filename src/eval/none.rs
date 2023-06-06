@@ -1,15 +1,30 @@
 use std::fmt::{self, Debug, Formatter};
 
-use super::{cast, CastInfo, FromValue, IntoValue, Reflect, Value};
+use super::{cast, ty, CastInfo, FromValue, IntoValue, Reflect, Type, Value};
 use crate::diag::StrResult;
 
 /// A value that indicates the absence of any other value.
+///
+/// The none type has exactly one value: `{none}`.
+///
+/// When inserted into the document, it is not visible. This is also the value
+/// that is produced by empty code blocks. It can be
+/// [joined]($scripting/#blocks) with any value, yielding the other value.
+///
+/// ## Example { #example }
+/// ```example
+/// Not visible: #none
+/// ```
+///
+/// Display: None
+/// Category: foundations
+#[ty("none")]
 #[derive(Default, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct NoneValue;
 
 impl Reflect for NoneValue {
     fn describe() -> CastInfo {
-        CastInfo::Type("none")
+        CastInfo::Type(Type::of::<Self>())
     }
 
     fn castable(value: &Value) -> bool {

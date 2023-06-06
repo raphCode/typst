@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use ecow::EcoString;
 
-use crate::eval::{cast, dict, Dict, Value};
+use crate::eval::{cast, dict, ty, Dict, Value};
 use crate::font::Font;
 use crate::geom::{
     self, rounded_rect, Abs, Align, Axes, Color, Corners, Dir, Em, Geometry, Length,
@@ -612,6 +612,10 @@ cast! {
 }
 
 /// Meta information that isn't visible or renderable.
+///
+/// Display: Meta
+/// Category: special
+#[ty("meta")]
 #[derive(Clone, PartialEq, Hash)]
 pub enum Meta {
     /// An internal or external link to a destination.
@@ -628,7 +632,7 @@ pub enum Meta {
 }
 
 cast! {
-    type Meta: "meta",
+    type Meta,
 }
 
 impl Debug for Meta {

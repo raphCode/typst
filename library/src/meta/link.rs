@@ -37,7 +37,7 @@ pub struct LinkElem {
     ///
     /// - To link to another part of the document, `dest` can take one of three
     ///   forms:
-    ///   - A [label]($func/label) attached to an element. If you also want
+    ///   - A [label]($type/label) attached to an element. If you also want
     ///     automatic text for the link based on the element, consider using
     ///     a [reference]($func/ref) instead.
     ///

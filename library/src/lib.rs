@@ -14,7 +14,6 @@ pub mod symbols;
 pub mod text;
 pub mod visualize;
 
-use typst::diag::At;
 use typst::eval::{LangItems, Library, Module, Scope};
 use typst::geom::Smart;
 use typst::model::{Element, Styles};
@@ -126,16 +125,6 @@ fn items() -> LangItems {
         math_frac: |num, denom| math::FracElem::new(num, denom).pack(),
         math_root: |index, radicand| {
             math::RootElem::new(radicand).with_index(index).pack()
-        },
-        library_method: |vm, dynamic, method, args, span| {
-            if let Some(counter) = dynamic.downcast::<meta::Counter>().cloned() {
-                counter.call_method(vm, method, args, span)
-            } else if let Some(state) = dynamic.downcast::<meta::State>().cloned() {
-                state.call_method(vm, method, args, span)
-            } else {
-                Err(format!("type {} has no method `{method}`", dynamic.type_name()))
-                    .at(span)
-            }
         },
     }
 }

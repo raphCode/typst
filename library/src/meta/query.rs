@@ -78,7 +78,7 @@ use crate::prelude::*;
 ///
 /// In general, you should try not to write queries that affect themselves.
 /// The same words of caution also apply to other introspection features like
-/// [counters]($func/counter) and [state]($func/state).
+/// [counters]($type/counter) and [state]($type/state).
 ///
 /// ```example
 /// = Real
@@ -126,20 +126,4 @@ pub fn query(
     vec.into_iter()
         .map(|elem| Value::Content(elem.into_inner()))
         .collect()
-}
-
-/// Turns a value into a selector. The following values are accepted:
-/// - An element function like a `heading` or `figure`.
-/// - A `{<label>}`.
-/// - A more complex selector like `{heading.where(level: 1)}`.
-///
-/// Display: Selector
-/// Category: meta
-#[func]
-pub fn selector(
-    /// Can be an element function like a `heading` or `figure`, a `{<label>}`
-    /// or a more complex selector like `{heading.where(level: 1)}`.
-    target: Selector,
-) -> Selector {
-    target
 }

@@ -12,11 +12,66 @@ use super::{
 };
 use crate::diag::{SourceResult, StrResult};
 use crate::doc::Meta;
-use crate::eval::{Dict, FromValue, IntoValue, Str, Value, Vm};
+use crate::eval::{func, ty, Dict, FromValue, IntoValue, Str, Value, Vm};
 use crate::syntax::Span;
 use crate::util::pretty_array_like;
 
-/// Composable representation of styled content.
+/// A piece of document content.
+///
+/// This type is at the heart of Typst. All markup you write and most
+/// [functions]($type/function) you call produce content values. You can create
+/// a content value by enclosing markup in square brackets. This is also how you
+/// pass content to functions.
+///
+/// ## Example { #example }
+/// ```example
+/// Type of *Hello!* is
+/// #type([*Hello!*])
+/// ```
+///
+/// Content can be added with the `+` operator, [joined
+/// together]($scripting/#blocks) and multiplied with integers. Wherever content
+/// is expected, you can also pass a [string]($type/string) or `{none}`.
+///
+/// ## Representation { #representation }
+/// Content consists of elements with fields. When constructing an element with
+/// its _element function,_ you provide these fields as arguments and when you
+/// have a content value, you can access its fields with [field access
+/// syntax]($scripting/#field-access).
+///
+/// Some fields are required: These must be provided when constructing an
+/// element and as a consequence, they are always available through field access
+/// on content of that type. Required fields are marked as such in the
+/// documentation.
+///
+/// Most fields are optional: Like required fields, they can be passed to the
+/// element function to configure them for a single element. However, these can
+/// also be configured with [set rules]($styling/#set-rules) to apply them to
+/// all elements within a scope. Optional fields are only available with field
+/// access syntax when they are were explicitly passed to the element function,
+/// not when they result from a set rule.
+///
+/// Each element has a default appearance. However, you can also completely
+/// customize its appearance with a [show rule]($styling/#show-rules). The show
+/// rule is passed the element. It can access the element's field and produce
+/// arbitrary content from it.
+///
+/// In the web app, you can hover over a content variable to see exactly which
+/// elements the content is composed of and what fields they have.
+/// Alternatively, you can inspect the output of the [`repr`]($func/repr)
+/// function.
+///
+/// Display: Content
+/// Category: foundations
+#[ty("content")]
+#[scope(
+    scope.define("func", Content::func_func());
+    scope.define("has", Content::has_func());
+    scope.define("at", Content::at_func());
+    scope.define("fields", Content::fields_func());
+    scope.define("location", Content::location_func());
+    scope
+)]
 #[derive(Clone, Hash)]
 #[allow(clippy::derived_hash_with_manual_eq)]
 pub struct Content {
@@ -60,11 +115,6 @@ impl Content {
             .attrs
             .extend(iter.map(|child| Attr::Child(Prehashed::new(child))));
         content
-    }
-
-    /// The element function of the contained content.
-    pub fn func(&self) -> ElemFunc {
-        self.func
     }
 
     /// Whether the content is an empty sequence.
@@ -197,26 +247,6 @@ impl Content {
     /// Iter over all fields on the content.
     ///
     /// Does not include synthesized fields for sequence and styled elements.
-    pub fn fields(&self) -> impl Iterator<Item = (&EcoString, Value)> {
-        static CHILD: EcoString = EcoString::inline("child");
-        static CHILDREN: EcoString = EcoString::inline("children");
-
-        let option = if let Some(iter) = self.to_sequence() {
-            Some((&CHILDREN, Value::Array(iter.cloned().map(Value::Content).collect())))
-        } else if let Some((child, _)) = self.to_styled() {
-            Some((&CHILD, Value::Content(child.clone())))
-        } else {
-            None
-        };
-
-        self.fields_ref()
-            .map(|(name, value)| (name, value.clone()))
-            .chain(option)
-    }
-
-    /// Iter over all fields on the content.
-    ///
-    /// Does not include synthesized fields for sequence and styled elements.
     pub fn fields_ref(&self) -> impl Iterator<Item = (&EcoString, &Value)> {
         let mut iter = self.attrs.iter();
         std::iter::from_fn(move || {
@@ -238,25 +268,6 @@ impl Content {
     #[track_caller]
     pub fn expect_field<T: FromValue>(&self, name: &str) -> T {
         self.field(name).unwrap().cast().unwrap()
-    }
-
-    /// Whether the content has the specified field.
-    pub fn has(&self, field: &str) -> bool {
-        self.field(field).is_some()
-    }
-
-    /// Borrow the value of the given field.
-    pub fn at(&self, field: &str, default: Option<Value>) -> StrResult<Value> {
-        self.field(field)
-            .or(default)
-            .ok_or_else(|| missing_field_no_default(field))
-    }
-
-    /// Return the fields of the content as a dict.
-    pub fn dict(&self) -> Dict {
-        self.fields()
-            .map(|(key, value)| (key.to_owned().into(), value))
-            .collect()
     }
 
     /// The content's label.
@@ -312,9 +323,9 @@ impl Content {
         }
     }
 
-    /// Repeat this content `count` times.
-    pub fn repeat(&self, count: usize) -> Self {
-        Self::sequence(vec![self.clone(); count])
+    /// Repeat this content `n` times.
+    pub fn repeat(&self, n: usize) -> Self {
+        Self::sequence(vec![self.clone(); n])
     }
 
     /// Disable a show rule recipe.
@@ -349,14 +360,6 @@ impl Content {
             || self.can::<dyn Synthesize>()
             || self.label().is_some())
             && !self.is_prepared()
-    }
-
-    /// This content's location in the document flow.
-    pub fn location(&self) -> Option<Location> {
-        self.attrs.iter().find_map(|modifier| match modifier {
-            Attr::Location(location) => Some(*location),
-            _ => None,
-        })
     }
 
     /// Attach a location to this content.
@@ -437,6 +440,93 @@ impl Content {
     }
 }
 
+impl Content {
+    /// The content's element function. This function can be used to create the element
+    /// contained in this content. It can be used in set and show rules for the
+    /// element. Can be compared with global functions to check whether you have
+    /// a specific
+    /// kind of element.
+    ///
+    /// Display: Func
+    /// Category: foundations
+    #[func(Content)]
+    pub fn func(&self) -> ElemFunc {
+        self.func
+    }
+
+    /// Whether the content has the specified field.
+    ///
+    /// Display: Has
+    /// Category: foundations
+    #[func(Content)]
+    pub fn has(
+        &self,
+        /// The field to look for.
+        field: Str,
+    ) -> bool {
+        self.field(&field).is_some()
+    }
+
+    /// Access the specified field on the content. Returns the default value if
+    /// the field does not exist or fails with an error if no default value was
+    /// specified.
+    ///
+    /// Display: At
+    /// Category: foundations
+    #[func(Content)]
+    pub fn at(
+        &self,
+        /// The field to access.
+        field: Str,
+        /// A default value to return if the field does not exist.
+        #[named]
+        default: Option<Value>,
+    ) -> StrResult<Value> {
+        self.field(&field)
+            .or(default)
+            .ok_or_else(|| missing_field_no_default(&field))
+    }
+
+    /// Returns the fields of this content.
+    ///
+    /// Display: Fields
+    /// Category: foundations
+    #[func(Content)]
+    pub fn fields(&self) -> Dict {
+        static CHILD: EcoString = EcoString::inline("child");
+        static CHILDREN: EcoString = EcoString::inline("children");
+
+        let option = if let Some(iter) = self.to_sequence() {
+            Some((&CHILDREN, Value::Array(iter.cloned().map(Value::Content).collect())))
+        } else if let Some((child, _)) = self.to_styled() {
+            Some((&CHILD, Value::Content(child.clone())))
+        } else {
+            None
+        };
+
+        self.fields_ref()
+            .map(|(name, value)| (name, value.clone()))
+            .chain(option)
+            .map(|(key, value)| (key.to_owned().into(), value))
+            .collect()
+    }
+
+    /// The location of the content. This is only available on content returned
+    /// by [query]($func/query), for other content it will return `{none}`. The
+    /// resulting location can be used with [counters]($type/counter),
+    /// [state]($type/state) and [queries]($func/query).
+    ///
+    /// Display: Location
+    /// Category: foundations
+    #[func(Content)]
+    pub fn location(&self) -> Option<Location> {
+        self.attrs.iter().find_map(|modifier| match modifier {
+            Attr::Location(location) => Some(*location),
+            _ => None,
+        })
+    }
+}
+
 impl Debug for Content {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let name = self.func.name();
@@ -451,6 +541,7 @@ impl Debug for Content {
 
         let mut pieces: Vec<_> = self
             .fields()
+            .into_iter()
             .map(|(name, value)| eco_format!("{name}: {value:?}"))
             .collect();
 

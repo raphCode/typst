@@ -1,5 +1,12 @@
 use super::*;
 
+/// An enum variant in a `derive(Cast)`.
+struct Variant {
+    ident: Ident,
+    string: String,
+    docs: String,
+}
+
 /// Expand the `#[derive(Cast)]` macro.
 pub fn derive_cast(item: &DeriveInput) -> Result<TokenStream> {
     let ty = &item.ident;
@@ -53,13 +60,6 @@ pub fn derive_cast(item: &DeriveInput) -> Result<TokenStream> {
     })
 }
 
-/// An enum variant in a `derive(Cast)`.
-struct Variant {
-    ident: Ident,
-    string: String,
-    docs: String,
-}
-
 /// Expand the `cast!` macro.
 pub fn cast(stream: TokenStream) -> Result<TokenStream> {
     let input: CastInput = syn::parse2(stream)?;
@@ -71,21 +71,21 @@ pub fn cast(stream: TokenStream) -> Result<TokenStream> {
     let into_value_body = create_into_value_body(&input);
     let from_value_body = create_from_value_body(&input);
 
-    let reflect = (!input.from_value.is_empty() || input.name.is_some()).then(|| {
+    let reflect = (!input.from_value.is_empty() || input.dynamic).then(|| {
         quote! {
             impl #eval::Reflect for #ty {
-                fn describe() -> #eval::CastInfo {
-                    #describe_body
-                }
-
                 fn castable(value: &#eval::Value) -> bool {
                     #castable_body
+                }
+
+                fn describe() -> #eval::CastInfo {
+                    #describe_body
                 }
             }
         }
     });
 
-    let into_value = (input.into_value.is_some() || input.name.is_some()).then(|| {
+    let into_value = (input.into_value.is_some() || input.dynamic).then(|| {
         quote! {
             impl #eval::IntoValue for #ty {
                 fn into_value(self) -> #eval::Value {
@@ -95,7 +95,7 @@ pub fn cast(stream: TokenStream) -> Result<TokenStream> {
         }
     });
 
-    let from_value = (!input.from_value.is_empty() || input.name.is_some()).then(|| {
+    let from_value = (!input.from_value.is_empty() || input.dynamic).then(|| {
         quote! {
             impl #eval::FromValue for #ty {
                 fn from_value(value: #eval::Value) -> ::typst::diag::StrResult<Self> {
@@ -105,55 +105,42 @@ pub fn cast(stream: TokenStream) -> Result<TokenStream> {
         }
     });
 
-    let ty = input.name.as_ref().map(|name| {
-        quote! {
-            impl #eval::Type for #ty {
-                const TYPE_NAME: &'static str = #name;
-            }
-        }
-    });
-
     Ok(quote! {
         #reflect
         #into_value
         #from_value
-        #ty
     })
 }
 
 /// The input to `cast!`.
 struct CastInput {
     ty: syn::Type,
-    name: Option<syn::LitStr>,
+    dynamic: bool,
     into_value: Option<syn::Expr>,
     from_value: Punctuated<Cast, Token![,]>,
 }
 
 impl Parse for CastInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        let ty;
-        let mut name = None;
+        let mut dynamic = false;
         if input.peek(syn::Token![type]) {
             let _: syn::Token![type] = input.parse()?;
-            ty = input.parse()?;
-            let _: syn::Token![:] = input.parse()?;
-            name = Some(input.parse()?);
-        } else {
-            ty = input.parse()?;
+            dynamic = true;
         }
 
+        let ty = input.parse()?;
         let _: syn::Token![,] = input.parse()?;
 
-        let mut into_value = None;
+        let mut to_value = None;
         if input.peek(syn::Token![self]) {
             let _: syn::Token![self] = input.parse()?;
             let _: syn::Token![=>] = input.parse()?;
-            into_value = Some(input.parse()?);
+            to_value = Some(input.parse()?);
             let _: syn::Token![,] = input.parse()?;
         }
 
         let from_value = Punctuated::parse_terminated(input)?;
-        Ok(Self { ty, name, into_value, from_value })
+        Ok(Self { ty, dynamic, into_value: to_value, from_value })
     }
 }
 
@@ -212,7 +199,7 @@ fn create_castable_body(input: &CastInput) -> TokenStream {
         }
     }
 
-    let dynamic_check = input.name.is_some().then(|| {
+    let dynamic_check = input.dynamic.then(|| {
         quote! {
             if let ::typst::eval::Value::Dyn(dynamic) = &value {
                 if dynamic.is::<Self>() {
@@ -261,9 +248,9 @@ fn create_describe_body(input: &CastInput) -> TokenStream {
         });
     }
 
-    if let Some(name) = &input.name {
+    if input.dynamic {
         infos.push(quote! {
-            ::typst::eval::CastInfo::Type(#name)
+            ::typst::eval::CastInfo::Type(::typst::eval::Type::of::<Self>())
         });
     }
 
@@ -301,7 +288,7 @@ fn create_from_value_body(input: &CastInput) -> TokenStream {
         }
     }
 
-    let dynamic_check = input.name.is_some().then(|| {
+    let dynamic_check = input.dynamic.then(|| {
         quote! {
             if let ::typst::eval::Value::Dyn(dynamic) = &value {
                 if let Some(concrete) = dynamic.downcast::<Self>() {

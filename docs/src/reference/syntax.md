@@ -24,7 +24,7 @@ more about their syntax and usage.
 | Emphasis           | `[_emphasis_]`           | [`emph`]($func/emph)         |
 | Raw text           | ``[`print(1)`]``         | [`raw`]($func/raw)           |
 | Link               | `[https://typst.app/]`   | [`link`]($func/link)         |
-| Label              | `[<intro>]`              | [`label`]($func/label)       |
+| Label              | `[<intro>]`              | [`label`]($type/label)       |
 | Reference          | `[@intro]`               | [`ref`]($func/ref)           |
 | Heading            | `[= Heading]`            | [`heading`]($func/heading)   |
 | Bullet list        | `[- item]`               | [`list`]($func/list)         |

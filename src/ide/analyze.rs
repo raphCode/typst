@@ -15,9 +15,9 @@ pub fn analyze_expr(world: &(dyn World + 'static), node: &LinkedNode) -> Vec<Val
     match node.cast::<ast::Expr>() {
         Some(ast::Expr::None(_)) => vec![Value::None],
         Some(ast::Expr::Auto(_)) => vec![Value::Auto],
-        Some(ast::Expr::Bool(v)) => vec![Value::Bool(v.get())],
-        Some(ast::Expr::Int(v)) => vec![Value::Int(v.get())],
-        Some(ast::Expr::Float(v)) => vec![Value::Float(v.get())],
+        Some(ast::Expr::Bool(v)) => vec![Value::Bool(v.get().into())],
+        Some(ast::Expr::Int(v)) => vec![Value::Int(v.get().into())],
+        Some(ast::Expr::Float(v)) => vec![Value::Float(v.get().into())],
         Some(ast::Expr::Numeric(v)) => vec![Value::numeric(v.get())],
         Some(ast::Expr::Str(v)) => vec![Value::Str(v.get().into())],
 

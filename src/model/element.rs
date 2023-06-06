@@ -45,11 +45,6 @@ impl ElemFunc {
         self.0.name
     }
 
-    /// Apply the given arguments to the function.
-    pub fn with(self, args: Args) -> Func {
-        Func::from(self).with(args)
-    }
-
     /// Extract details about the function.
     pub fn info(&self) -> &'static FuncInfo {
         &self.0.info

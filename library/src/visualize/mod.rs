@@ -16,6 +16,8 @@ use crate::prelude::*;
 
 /// Hook up all visualize definitions.
 pub(super) fn define(global: &mut Scope) {
+    global.define("color", Type::of::<Color>());
+    global.define("stroke", Type::of::<PartialStroke>());
     global.define("image", ImageElem::func());
     global.define("line", LineElem::func());
     global.define("rect", RectElem::func());
@@ -24,6 +26,11 @@ pub(super) fn define(global: &mut Scope) {
     global.define("circle", CircleElem::func());
     global.define("polygon", PolygonElem::func());
     global.define("path", PathElem::func());
+
+    // Prelude.
+    global.define("luma", Color::luma_func());
+    global.define("rgb", Color::rgb_func());
+    global.define("cmyk", Color::cmyk_func());
     global.define("black", Color::BLACK);
     global.define("gray", Color::GRAY);
     global.define("silver", Color::SILVER);

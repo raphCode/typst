@@ -66,7 +66,7 @@ You can also check out the [full syntax cheat sheet]($syntax).
 | Emphasis         | `\emph{emphasis}`         | `[_emphasis_]`         | [`emph`]($func/emph)     |
 | Monospace / code | `\texttt{print(1)}`       | ``[`print(1)`]``       | [`raw`]($func/raw)       |
 | Link             | `\url{https://typst.app}` | `[https://typst.app/]` | [`link`]($func/link)     |
-| Label            | `\label{intro}`           | `[<intro>]`            | [`label`]($func/label)   |
+| Label            | `\label{intro}`           | `[<intro>]`            | [`label`]($type/label)   |
 | Reference        | `\ref{intro}`             | `[@intro]`             | [`ref`]($func/ref)       |
 | Citation         | `\cite{humphrey97}`       | `[@humphrey97]`        | [`cite`]($func/cite)     |
 | Bullet list      | `itemize` environment     | `[- List]`             | [`list`]($func/list)     |
@@ -437,11 +437,12 @@ non-number characters will be interpreted as Typst variables.
 
 As you can see in the example above, Typst pre-defines a lot of useful variables
 in math mode. All Greek and some Hebrew letters are resolved by their name.
-Refer to the [symbol page]($func/symbol) or use the autocomplete panel to check
-which symbols are available. Alternate and related forms of symbols can often be
-selected by [appending a modifier]($type/symbol) after a period. For example,
-`arrow.l.squiggly` inserts a squiggly left-pointing arrow. If you want to insert
-multiletter text in your expression instead, enclose it in double quotes:
+Refer to the [symbol pages]($category/symbols) or use the autocomplete panel to
+check which symbols are available. Alternate and related forms of symbols can
+often be selected by [appending a modifier]($type/symbol) after a period. For
+example, `arrow.l.squiggly` inserts a squiggly left-pointing arrow. If you want
+to insert multiletter text in your expression instead, enclose it in double
+quotes:
 
 ```example
 $ delta "if" x <= 5 $

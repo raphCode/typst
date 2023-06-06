@@ -62,7 +62,7 @@ use std::iter::Sum;
 use std::ops::*;
 
 use crate::diag::StrResult;
-use crate::eval::{array, cast, Array, Dict, Value};
+use crate::eval::{array, cast, func, ty, Array, Dict, Float, Value};
 use crate::model::{Fold, Resolve, StyleChain};
 
 /// Generic access to a structure's components.

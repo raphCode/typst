@@ -5,9 +5,44 @@ use std::sync::Arc;
 
 use ecow::EcoString;
 
-use crate::diag::StrResult;
+use super::{cast, func, ty, Array};
+use crate::diag::{bail, SourceResult, StrResult};
+use crate::syntax::{Span, Spanned};
 
-/// A symbol, possibly with variants.
+/// A Unicode symbol.
+///
+/// Typst defines common symbols so that they can easily be written with
+/// standard keyboards. The symbols are defined in modules, from which they can
+/// be accessed using [field access notation]($scripting/#fields):
+///
+/// - General symbols are defined in the [`sym` module]($category/symbols/sym)
+/// - Emoji are defined in the [`emoji` module]($category/symbols/emoji)
+///
+/// Moreover, you can define custom symbols with this type's constructor
+/// function.
+///
+/// ```example
+/// #sym.arrow.r \
+/// #sym.gt.eq.not \
+/// $gt.eq.not$ \
+/// #emoji.face.halo
+/// ```
+///
+/// Many symbols have different variants, which can be selected by appending the
+/// modifiers with dot notation. The order of the modifiers is not relevant.
+/// Visit the documentation pages of the symbol modules and click on a symbol to
+/// see its available variants.
+///
+/// ```example
+/// $arrow.l$ \
+/// $arrow.r$ \
+/// $arrow.t.quad$
+/// ```
+///
+/// Display: Symbol
+/// Category: symbols
+#[ty("symbol")]
+#[constructor(Symbol::new_func())]
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Symbol(Repr);
 
@@ -27,8 +62,56 @@ enum List {
 }
 
 impl Symbol {
+    /// Create a custom symbol with modifiers.
+    ///
+    /// ## Example { #example }
+    /// ```example
+    /// #let envelope = symbol(
+    ///   "🖂",
+    ///   ("stamped", "🖃"),
+    ///   ("stamped.pen", "🖆"),
+    ///   ("lightning", "🖄"),
+    ///   ("fly", "🖅"),
+    /// )
+    ///
+    /// #envelope
+    /// #envelope.stamped
+    /// #envelope.stamped.pen
+    /// #envelope.lightning
+    /// #envelope.fly
+    /// ```
+    ///
+    /// Display: Construct
+    /// Category: symbols
+    #[func(Symbol)]
+    pub fn new(
+        /// The variants of the symbol.
+        ///
+        /// Can be a just a string consisting of a single character for the
+        /// modifierless variant or an array with two strings specifying the modifiers
+        /// and the symbol. Individual modifiers should be separated by dots. When
+        /// displaying a symbol, Typst selects the first from the variants that have
+        /// all attached modifiers and the minimum number of other modifiers.
+        #[variadic]
+        variants: Vec<Spanned<Variant>>,
+        /// The callsite span.
+        span: Span,
+    ) -> SourceResult<Symbol> {
+        let mut list = Vec::new();
+        if variants.is_empty() {
+            bail!(span, "expected at least one variant");
+        }
+        for Spanned { v, span } in variants {
+            if list.iter().any(|(prev, _)| &v.0 == prev) {
+                bail!(span, "duplicate variant");
+            }
+            list.push((v.0, v.1));
+        }
+        Ok(Symbol::runtime(list.into_boxed_slice()))
+    }
+
     /// Create a new symbol from a single character.
-    pub const fn new(c: char) -> Self {
+    pub const fn single(c: char) -> Self {
         Self(Repr::Single(c))
     }
 
@@ -143,6 +226,21 @@ impl List {
             List::Runtime(list) => Variants::Runtime(list.iter()),
         }
     }
+}
+
+/// A value that can be cast to a symbol.
+pub struct Variant(EcoString, char);
+
+cast! {
+    Variant,
+    c: char => Self(EcoString::new(), c),
+    array: Array => {
+        let mut iter = array.into_iter();
+        match (iter.next(), iter.next(), iter.next()) {
+            (Some(a), Some(b), None) => Self(a.cast()?, b.cast()?),
+            _ => Err("point array must contain exactly two entries")?,
+        }
+    },
 }
 
 /// Iterator over variants.

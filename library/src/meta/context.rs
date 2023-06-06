@@ -3,7 +3,7 @@ use crate::prelude::*;
 /// Provides access to the location of content.
 ///
 /// This is useful in combination with [queries]($func/query),
-/// [counters]($func/counter), [state]($func/state), and [links]($func/link).
+/// [counters]($type/counter), [state]($type/state), and [links]($func/link).
 /// See their documentation for more details.
 ///
 /// ```example
@@ -12,37 +12,6 @@ use crate::prelude::*;
 ///   #loc.position()!
 /// ])
 /// ```
-///
-/// ## Methods
-/// ### page()
-/// Return the page number for this location.
-///
-/// Note that this does not return the value of the [page counter]($func/counter)
-/// at this location, but the true page number (starting from one).
-///
-/// If you want to know the value of the page counter, use
-/// `{counter(page).at(loc)}` instead.
-///
-/// - returns: integer
-///
-/// ### position()
-/// Return a dictionary with the page number and the x, y position for this
-/// location. The page number starts at one and the coordinates are measured
-/// from the top-left of the page.
-///
-/// If you only need the page number, use `page()` instead as it allows Typst
-/// to skip unnecessary work.
-///
-/// - returns: dictionary
-///
-/// ### page-numbering()
-/// Returns the page numbering pattern of the page at this location. This can be
-/// used when displaying the page counter in order to obtain the local numbering.
-/// This is useful if you are building custom indices or outlines.
-///
-/// If the page numbering is set to `none` at that location, this function returns `none`.
-///
-/// - returns: string or function or none
 ///
 /// Display: Locate
 /// Category: meta

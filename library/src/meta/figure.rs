@@ -312,8 +312,8 @@ impl FigureElem {
             self.counter(),
             self.numbering(StyleChain::default()),
         ) {
-            let loc = self.0.location().unwrap();
-            let numbers = counter.at(vt, loc)?.display(vt, &numbering)?;
+            let location = self.0.location().unwrap();
+            let numbers = counter.at(location, vt)?.display(vt, &numbering)?;
 
             if !supplement.is_empty() {
                 supplement += TextElem::packed("\u{a0}");

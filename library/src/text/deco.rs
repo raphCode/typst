@@ -233,6 +233,10 @@ impl Show for StrikeElem {
 }
 
 /// Defines a line that is positioned over, under or on top of text.
+///
+/// Display: Decoration
+/// Category: meta
+#[ty("decoration")]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Decoration {
     pub line: DecoLine,
@@ -252,7 +256,7 @@ impl Fold for Decoration {
 }
 
 cast! {
-    type Decoration: "decoration",
+    type Decoration,
 }
 
 /// A kind of decorative line.

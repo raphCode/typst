@@ -1,28 +1,6 @@
-use crate::prelude::*;
+use typst::eval::{Never, NoneValue};
 
-/// Determine a value's type.
-///
-/// Returns the name of the value's type.
-///
-/// ## Example { #example }
-/// ```example
-/// #type(12) \
-/// #type(14.7) \
-/// #type("hello") \
-/// #type(none) \
-/// #type([Hi]) \
-/// #type(x => x + 1)
-/// ```
-///
-/// Display: Type
-/// Category: foundations
-#[func]
-pub fn type_(
-    /// The value whose type's to determine.
-    value: Value,
-) -> Str {
-    value.type_name().into()
-}
+use crate::prelude::*;
 
 /// The string representation of a value.
 ///

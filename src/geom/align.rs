@@ -80,6 +80,21 @@ impl Debug for Align {
 }
 
 /// The generic alignment representation.
+///
+/// Display: Alignment
+/// Category: layout
+#[ty("alignment")]
+#[scope({
+    scope.define("start", GenAlign::Start);
+    scope.define("end", GenAlign::End);
+    scope.define("left", GenAlign::Specific(Align::Left));
+    scope.define("center", GenAlign::Specific(Align::Center));
+    scope.define("right", GenAlign::Specific(Align::Right));
+    scope.define("top", GenAlign::Specific(Align::Top));
+    scope.define("horizon", GenAlign::Specific(Align::Horizon));
+    scope.define("bottom", GenAlign::Specific(Align::Bottom));
+    scope
+})]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum GenAlign {
     /// Align at the start side of the text direction.
@@ -129,11 +144,18 @@ impl Debug for GenAlign {
 }
 
 cast! {
-    type GenAlign: "alignment",
+    type GenAlign,
 }
 
+/// A 2-dimensional alignment.
+///
+/// Display: 2D Alignment
+/// Category: layout
+#[ty("alignment2d")]
+type Align2d = Axes<GenAlign>;
+
 cast! {
-    type Axes<GenAlign>: "2d alignment",
+    type Align2d,
 }
 
 cast! {
@@ -154,7 +176,7 @@ cast! {
         aligns.set(align.axis(), Some(align));
         aligns
     },
-    aligns: Axes<GenAlign> => aligns.map(Some),
+    aligns: Align2d => aligns.map(Some),
 }
 
 impl From<Axes<GenAlign>> for Axes<Option<GenAlign>> {

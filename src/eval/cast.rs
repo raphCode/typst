@@ -3,9 +3,9 @@ pub use typst_macros::{cast, Cast};
 use std::fmt::Write;
 use std::ops::Add;
 
-use ecow::EcoString;
+use ecow::{eco_format, EcoString};
 
-use super::Value;
+use super::{Type, Value};
 use crate::diag::{At, SourceResult, StrResult};
 use crate::syntax::{Span, Spanned};
 use crate::util::separated_list;
@@ -190,7 +190,7 @@ pub enum CastInfo {
     /// A specific value, plus short documentation for that value.
     Value(Value, &'static str),
     /// Any value of a type.
-    Type(&'static str),
+    Type(Type),
     /// Multiple alternatives.
     Union(Vec<Self>),
 }
@@ -209,11 +209,11 @@ impl CastInfo {
                 CastInfo::Any => parts.push("anything".into()),
                 CastInfo::Value(value, _) => {
                     parts.push(value.repr().into());
-                    if value.type_name() == found.type_name() {
+                    if value.ty() == found.ty() {
                         *matching_type = true;
                     }
                 }
-                CastInfo::Type(ty) => parts.push((*ty).into()),
+                CastInfo::Type(ty) => parts.push(eco_format!("{ty}")),
                 CastInfo::Union(options) => {
                     for option in options {
                         accumulate(option, found, parts, matching_type);
@@ -235,7 +235,7 @@ impl CastInfo {
 
         if !matching_type {
             msg.push_str(", found ");
-            msg.push_str(found.type_name());
+            write!(msg, "{}", found.ty()).unwrap();
         }
         if_chain::if_chain! {
             if let Value::Int(i) = found;

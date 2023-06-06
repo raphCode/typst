@@ -45,8 +45,8 @@ pub struct PageElem {
     /// ```
     #[resolve]
     #[parse(
-        let paper = args.named_or_find::<Paper>("paper")?;
-        args.named("width")?
+        let paper = args.find_named_or_pos::<Paper>("paper")?;
+        args.find_named("width")?
             .or_else(|| paper.map(|paper| Smart::Custom(paper.width().into())))
     )]
     #[default(Smart::Custom(Paper::A4.width().into()))]
@@ -60,7 +60,7 @@ pub struct PageElem {
     /// dynamically grow and shrink to fit their content.
     #[resolve]
     #[parse(
-        args.named("height")?
+        args.find_named("height")?
             .or_else(|| paper.map(|paper| Smart::Custom(paper.height().into())))
     )]
     #[default(Smart::Custom(Paper::A4.height().into()))]
@@ -204,7 +204,7 @@ pub struct PageElem {
     ///
     /// For just a page number, the `numbering` property, typically suffices. If
     /// you want to create a custom footer, but still display the page number,
-    /// you can directly access the [page counter]($func/counter).
+    /// you can directly access the [page counter]($type/counter).
     ///
     /// ```example
     /// #set par(justify: true)

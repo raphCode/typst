@@ -8,8 +8,9 @@ use ecow::eco_format;
 use siphasher::sip128::{Hasher128, SipHasher13};
 
 use super::{
-    cast, format_str, ops, Args, Array, CastInfo, Content, Dict, FromValue, Func,
-    IntoValue, Module, Reflect, Str, Symbol,
+    cast, format_str, ops, Args, Array, AutoValue, Bool, CastInfo, Content, Dict, Float,
+    FromValue, Func, Int, IntoValue, Module, NoneValue, Reflect, Scope, Str, Symbol,
+    Type, TypeOf,
 };
 use crate::diag::StrResult;
 use crate::geom::{Abs, Angle, Color, Em, Fr, Length, Ratio, Rel};
@@ -17,7 +18,8 @@ use crate::model::{Label, Styles};
 use crate::syntax::{ast, Span};
 
 /// A computational value.
-#[derive(Clone, Default)]
+#[derive(Default, Clone, Hash)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 pub enum Value {
     /// The value that indicates the absence of a meaningful value.
     #[default]
@@ -25,11 +27,11 @@ pub enum Value {
     /// A value that indicates some smart default behaviour.
     Auto,
     /// A boolean: `true, false`.
-    Bool(bool),
+    Bool(Bool),
     /// An integer: `120`.
-    Int(i64),
+    Int(Int),
     /// A floating-point number: `1.2`, `10e-4`.
-    Float(f64),
+    Float(Float),
     /// A length: `12pt`, `3cm`, `1.5em`, `1em - 2pt`.
     Length(Length),
     /// An angle: `1.5rad`, `90deg`.
@@ -60,6 +62,8 @@ pub enum Value {
     Func(Func),
     /// Captured arguments to a function.
     Args(Args),
+    /// A type.
+    Type(Type),
     /// A module.
     Module(Module),
     /// A dynamic value.
@@ -70,7 +74,7 @@ impl Value {
     /// Create a new dynamic value.
     pub fn dynamic<T>(any: T) -> Self
     where
-        T: Type + Debug + PartialEq + Hash + Sync + Send + 'static,
+        T: Debug + TypeOf + PartialEq + Hash + Sync + Send + 'static,
     {
         Self::Dyn(Dynamic::new(any))
     }
@@ -87,31 +91,32 @@ impl Value {
         }
     }
 
-    /// The name of the stored value's type.
-    pub fn type_name(&self) -> &'static str {
+    /// The type of this value.
+    pub fn ty(&self) -> Type {
         match self {
-            Self::None => "none",
-            Self::Auto => "auto",
-            Self::Bool(_) => bool::TYPE_NAME,
-            Self::Int(_) => i64::TYPE_NAME,
-            Self::Float(_) => f64::TYPE_NAME,
-            Self::Length(_) => Length::TYPE_NAME,
-            Self::Angle(_) => Angle::TYPE_NAME,
-            Self::Ratio(_) => Ratio::TYPE_NAME,
-            Self::Relative(_) => Rel::<Length>::TYPE_NAME,
-            Self::Fraction(_) => Fr::TYPE_NAME,
-            Self::Color(_) => Color::TYPE_NAME,
-            Self::Symbol(_) => Symbol::TYPE_NAME,
-            Self::Str(_) => Str::TYPE_NAME,
-            Self::Label(_) => Label::TYPE_NAME,
-            Self::Content(_) => Content::TYPE_NAME,
-            Self::Styles(_) => Styles::TYPE_NAME,
-            Self::Array(_) => Array::TYPE_NAME,
-            Self::Dict(_) => Dict::TYPE_NAME,
-            Self::Func(_) => Func::TYPE_NAME,
-            Self::Args(_) => Args::TYPE_NAME,
-            Self::Module(_) => Module::TYPE_NAME,
-            Self::Dyn(v) => v.type_name(),
+            Self::None => Type::of::<NoneValue>(),
+            Self::Auto => Type::of::<AutoValue>(),
+            Self::Bool(_) => Type::of::<Bool>(),
+            Self::Int(_) => Type::of::<Int>(),
+            Self::Float(_) => Type::of::<Float>(),
+            Self::Length(_) => Type::of::<Length>(),
+            Self::Angle(_) => Type::of::<Angle>(),
+            Self::Ratio(_) => Type::of::<Ratio>(),
+            Self::Relative(_) => Type::of::<Rel<Length>>(),
+            Self::Fraction(_) => Type::of::<Fr>(),
+            Self::Color(_) => Type::of::<Color>(),
+            Self::Symbol(_) => Type::of::<Symbol>(),
+            Self::Str(_) => Type::of::<Str>(),
+            Self::Label(_) => Type::of::<Label>(),
+            Self::Content(_) => Type::of::<Content>(),
+            Self::Styles(_) => Type::of::<Styles>(),
+            Self::Array(_) => Type::of::<Array>(),
+            Self::Dict(_) => Type::of::<Dict>(),
+            Self::Func(_) => Type::of::<Func>(),
+            Self::Args(_) => Type::of::<Args>(),
+            Self::Type(_) => Type::of::<Type>(),
+            Self::Module(_) => Type::of::<Module>(),
+            Self::Dyn(v) => v.ty(),
         }
     }
 
@@ -124,11 +129,22 @@ impl Value {
     pub fn field(&self, field: &str) -> StrResult<Value> {
         match self {
             Self::Symbol(symbol) => symbol.clone().modified(field).map(Self::Symbol),
-            Self::Dict(dict) => dict.at(field, None).cloned(),
-            Self::Content(content) => content.at(field, None),
-            Self::Module(module) => module.get(field).cloned(),
+            Self::Dict(dict) => dict.at(field.into(), None),
+            Self::Content(content) => content.at(field.into(), None),
+            Self::Type(ty) => ty.get(field).cloned(),
             Self::Func(func) => func.get(field).cloned(),
-            v => Err(eco_format!("cannot access fields on type {}", v.type_name())),
+            Self::Module(module) => module.get(field).cloned(),
+            v => Err(eco_format!("cannot access fields on type {}", v.ty())),
+        }
+    }
+
+    /// The associated scope, if this is a function, type, or module.
+    pub fn scope(&self) -> Option<&Scope> {
+        match self {
+            Self::Func(func) => func.info().map(|info| &info.scope),
+            Self::Type(ty) => Some(&ty.info().scope),
+            Self::Module(module) => Some(module.scope()),
+            _ => None,
         }
     }
 
@@ -156,6 +172,7 @@ impl Value {
             Self::Symbol(v) => item!(text)(v.get().into()),
             Self::Content(v) => v,
             Self::Func(_) => Content::empty(),
+            Self::Type(_) => Content::empty(),
             Self::Module(module) => module.content(),
             _ => item!(raw)(self.repr().into(), Some("typc".into()), false),
         }
@@ -173,8 +190,8 @@ impl Value {
 impl Debug for Value {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::None => f.pad("none"),
-            Self::Auto => f.pad("auto"),
+            Self::None => Debug::fmt(&NoneValue, f),
+            Self::Auto => Debug::fmt(&AutoValue, f),
             Self::Bool(v) => Debug::fmt(v, f),
             Self::Int(v) => Debug::fmt(v, f),
             Self::Float(v) => Debug::fmt(v, f),
@@ -193,6 +210,7 @@ impl Debug for Value {
             Self::Dict(v) => Debug::fmt(v, f),
             Self::Func(v) => Debug::fmt(v, f),
             Self::Args(v) => Debug::fmt(v, f),
+            Self::Type(v) => Debug::fmt(v, f),
             Self::Module(v) => Debug::fmt(v, f),
             Self::Dyn(v) => Debug::fmt(v, f),
         }
@@ -211,36 +229,6 @@ impl PartialOrd for Value {
     }
 }
 
-impl Hash for Value {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        std::mem::discriminant(self).hash(state);
-        match self {
-            Self::None => {}
-            Self::Auto => {}
-            Self::Bool(v) => v.hash(state),
-            Self::Int(v) => v.hash(state),
-            Self::Float(v) => v.to_bits().hash(state),
-            Self::Length(v) => v.hash(state),
-            Self::Angle(v) => v.hash(state),
-            Self::Ratio(v) => v.hash(state),
-            Self::Relative(v) => v.hash(state),
-            Self::Fraction(v) => v.hash(state),
-            Self::Color(v) => v.hash(state),
-            Self::Symbol(v) => v.hash(state),
-            Self::Str(v) => v.hash(state),
-            Self::Label(v) => v.hash(state),
-            Self::Content(v) => v.hash(state),
-            Self::Styles(v) => v.hash(state),
-            Self::Array(v) => v.hash(state),
-            Self::Dict(v) => v.hash(state),
-            Self::Func(v) => v.hash(state),
-            Self::Args(v) => v.hash(state),
-            Self::Module(v) => v.hash(state),
-            Self::Dyn(v) => v.hash(state),
-        }
-    }
-}
-
 /// A dynamic value.
 #[derive(Clone, Hash)]
 #[allow(clippy::derived_hash_with_manual_eq)]
@@ -250,24 +238,24 @@ impl Dynamic {
     /// Create a new instance from any value that satisfies the required bounds.
     pub fn new<T>(any: T) -> Self
     where
-        T: Type + Debug + PartialEq + Hash + Sync + Send + 'static,
+        T: Debug + TypeOf + PartialEq + Hash + Sync + Send + 'static,
     {
         Self(Arc::new(any))
     }
 
     /// Whether the wrapped type is `T`.
-    pub fn is<T: Type + 'static>(&self) -> bool {
+    pub fn is<T: 'static>(&self) -> bool {
         (*self.0).as_any().is::<T>()
     }
 
     /// Try to downcast to a reference to a specific type.
-    pub fn downcast<T: Type + 'static>(&self) -> Option<&T> {
+    pub fn downcast<T: 'static>(&self) -> Option<&T> {
         (*self.0).as_any().downcast_ref()
     }
 
     /// The name of the stored value's type.
-    pub fn type_name(&self) -> &'static str {
-        self.0.dyn_type_name()
+    pub fn ty(&self) -> Type {
+        self.0.dyn_ty()
     }
 }
 
@@ -291,13 +279,13 @@ cast! {
 trait Bounds: Debug + Sync + Send + 'static {
     fn as_any(&self) -> &dyn Any;
     fn dyn_eq(&self, other: &Dynamic) -> bool;
-    fn dyn_type_name(&self) -> &'static str;
+    fn dyn_ty(&self) -> Type;
     fn hash128(&self) -> u128;
 }
 
 impl<T> Bounds for T
 where
-    T: Type + Debug + PartialEq + Hash + Sync + Send + 'static,
+    T: Debug + TypeOf + PartialEq + Hash + Sync + Send + 'static,
 {
     fn as_any(&self) -> &dyn Any {
         self
@@ -308,8 +296,8 @@ where
         self == other
     }
 
-    fn dyn_type_name(&self) -> &'static str {
-        T::TYPE_NAME
+    fn dyn_ty(&self) -> Type {
+        Type::of::<T>()
     }
 
     #[tracing::instrument(skip_all)]
@@ -329,25 +317,15 @@ impl Hash for dyn Bounds {
     }
 }
 
-/// The type of a value.
-pub trait Type {
-    /// The name of the type.
-    const TYPE_NAME: &'static str;
-}
-
 /// Implement traits for primitives.
 macro_rules! primitive {
     (
         $ty:ty: $name:literal, $variant:ident
         $(, $other:ident$(($binding:ident))? => $out:expr)*
     ) => {
-        impl Type for $ty {
-            const TYPE_NAME: &'static str = $name;
-        }
-
         impl Reflect for $ty {
             fn describe() -> CastInfo {
-                CastInfo::Type(Self::TYPE_NAME)
+                CastInfo::Type(Type::of::<Self>())
             }
 
             fn castable(value: &Value) -> bool {
@@ -369,8 +347,8 @@ macro_rules! primitive {
                     $(Value::$other$(($binding))? => Ok($out),)*
                     v => Err(eco_format!(
                         "expected {}, found {}",
-                        Self::TYPE_NAME,
-                        v.type_name(),
+                        Type::of::<Self>(),
+                        v.ty(),
                     )),
                 }
             }
@@ -381,9 +359,9 @@ macro_rules! primitive {
     (@$other:ident) => { Value::$other };
 }
 
-primitive! { bool: "boolean", Bool }
-primitive! { i64: "integer", Int }
-primitive! { f64: "float", Float, Int(v) => v as f64 }
+primitive! { Bool: "boolean", Bool }
+primitive! { Int: "integer", Int }
+primitive! { Float: "float", Float, Int(v) => v.as_float() }
 primitive! { Length: "length", Length }
 primitive! { Angle: "angle", Angle }
 primitive! { Ratio: "ratio", Ratio }
@@ -410,9 +388,14 @@ primitive! { Content: "content",
 primitive! { Styles: "styles", Styles }
 primitive! { Array: "array", Array }
 primitive! { Dict: "dictionary", Dict }
-primitive! { Func: "function", Func }
+primitive! {
+    Func: "function",
+    Func,
+    Type(ty) => ty.constructor()?.clone()
+}
 primitive! { Args: "arguments", Args }
 primitive! { Module: "module", Module }
+primitive! { Type: "type", Type }
 
 #[cfg(test)]
 mod tests {

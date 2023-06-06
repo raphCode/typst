@@ -40,7 +40,7 @@ pub struct FootnoteElem {
     ///
     /// By default, the footnote numbering continues throughout your document.
     /// If you prefer per-page footnote numbering, you can reset the footnote
-    /// [counter]($func/counter) in the page [header]($func/page.header). In the
+    /// [counter]($type/counter) in the page [header]($func/page.header). In the
     /// future, there might be a simpler way to achieve this.
     ///
     /// ```example
@@ -71,7 +71,7 @@ impl Show for FootnoteElem {
         let loc = self.0.location().unwrap();
         let numbering = self.numbering(styles);
         let counter = Counter::of(Self::func());
-        let num = counter.at(vt, loc)?.display(vt, &numbering)?;
+        let num = counter.at(loc, vt)?.display(vt, &numbering)?;
         let sup = SuperElem::new(num).pack();
         let hole = HElem::new(Abs::zero().into()).with_weak(true).pack();
         let loc = self.0.location().unwrap().variant(1);
@@ -187,7 +187,7 @@ impl Show for FootnoteEntry {
         let numbering = note.numbering(StyleChain::default());
         let counter = Counter::of(FootnoteElem::func());
         let loc = note.0.location().unwrap();
-        let num = counter.at(vt, loc)?.display(vt, &numbering)?;
+        let num = counter.at(loc, vt)?.display(vt, &numbering)?;
         let sup = SuperElem::new(num)
             .pack()
             .linked(Destination::Location(loc))

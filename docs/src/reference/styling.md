@@ -125,7 +125,7 @@ to:
 
 - **Regex:** `{show regex("\w+"): ..}` \
   Select and transform text with a regular expression for even more flexibility.
-  See the documentation of the [`regex` function]($func/regex) for details.
+  See the documentation of the [`regex` type]($type/regex) for details.
 
 - **Function with fields:** `{show heading.where(level: 1): ..}` \
   Transform only elements that have the specified fields. For example, you might
@@ -133,7 +133,7 @@ to:
 
 - **Label:** `{show <intro>: ..}` \
   Select and transform elements that have the specified label.
-  See the documentation of the [`label` function]($func/label) for more details.
+  See the documentation of the [`label` type]($type/label) for more details.
 
 ```example
 #show "Project": smallcaps

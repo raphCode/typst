@@ -1,8 +1,47 @@
 use std::str::FromStr;
 
 use super::*;
+use crate::diag::{At, SourceResult};
+use crate::eval::{Args, Str};
+use crate::syntax::Spanned;
 
-/// A color in a dynamic format.
+/// A color in a specific color space.
+///
+/// Typst supports:
+/// - sRGB through the [`rgb` function]($func/rgb)
+/// - Device CMYK through [`cmyk` function]($func/cmyk)
+/// - D65 Gray through the [`luma` function]($func/luma)
+///
+/// Display: Color
+/// Category: visualize
+#[ty("color")]
+#[scope({
+    scope.define("luma", Color::luma_func());
+    scope.define("rgb", Color::rgb_func());
+    scope.define("cmyk", Color::cmyk_func());
+    scope.define("lighten", Color::lighten_func());
+    scope.define("darken", Color::darken_func());
+    scope.define("negate", Color::negate_func());
+    scope.define("black", Color::BLACK);
+    scope.define("gray", Color::GRAY);
+    scope.define("silver", Color::SILVER);
+    scope.define("white", Color::WHITE);
+    scope.define("navy", Color::NAVY);
+    scope.define("blue", Color::BLUE);
+    scope.define("aqua", Color::AQUA);
+    scope.define("teal", Color::TEAL);
+    scope.define("eastern", Color::EASTERN);
+    scope.define("purple", Color::PURPLE);
+    scope.define("fuchsia", Color::FUCHSIA);
+    scope.define("maroon", Color::MAROON);
+    scope.define("red", Color::RED);
+    scope.define("orange", Color::ORANGE);
+    scope.define("yellow", Color::YELLOW);
+    scope.define("olive", Color::OLIVE);
+    scope.define("green", Color::GREEN);
+    scope.define("lime", Color::LIME);
+    scope
+})]
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Color {
     /// An 8-bit luma color.
@@ -33,17 +72,125 @@ impl Color {
     pub const GREEN: Self = Self::Rgba(RgbaColor::new(0x2E, 0xCC, 0x40, 0xFF));
     pub const LIME: Self = Self::Rgba(RgbaColor::new(0x01, 0xFF, 0x70, 0xFF));
 
-    /// Convert this color to RGBA.
-    pub fn to_rgba(self) -> RgbaColor {
-        match self {
-            Self::Luma(luma) => luma.to_rgba(),
-            Self::Rgba(rgba) => rgba,
-            Self::Cmyk(cmyk) => cmyk.to_rgba(),
-        }
+    /// Create a grayscale color.
+    ///
+    /// ## Example { #example }
+    /// ```example
+    /// #for x in range(250, step: 50) {
+    ///   box(square(fill: luma(x)))
+    /// }
+    /// ```
+    ///
+    /// Display: Luma
+    /// Category: visualize
+    #[func(Color)]
+    pub fn luma(
+        /// The gray component.
+        gray: Component,
+    ) -> Color {
+        LumaColor::new(gray.0).into()
     }
 
-    /// Lighten this color by the given factor.
-    pub fn lighten(self, factor: Ratio) -> Self {
+    /// Create an RGB(A) color.
+    ///
+    /// The color is specified in the sRGB color space.
+    ///
+    /// _Note:_ While you can specify transparent colors and Typst's preview will
+    /// render them correctly, the PDF export does not handle them properly at the
+    /// moment. This will be fixed in the future.
+    ///
+    /// ## Example { #example }
+    /// ```example
+    /// #square(fill: rgb("#b1f2eb"))
+    /// #square(fill: rgb(87, 127, 230))
+    /// #square(fill: rgb(25%, 13%, 65%))
+    /// ```
+    ///
+    /// Display: RGB
+    /// Category: visualize
+    #[func(Color)]
+    pub fn rgb(
+        /// The color in hexadecimal notation.
+        ///
+        /// Accepts three, four, six or eight hexadecimal digits and optionally
+        /// a leading hashtag.
+        ///
+        /// If this string is given, the individual components should not be given.
+        ///
+        /// ```example
+        /// #text(16pt, rgb("#239dad"))[
+        ///   *Typst*
+        /// ]
+        /// ```
+        #[external]
+        hex: Str,
+        /// The red component.
+        #[external]
+        red: Component,
+        /// The green component.
+        #[external]
+        green: Component,
+        /// The blue component.
+        #[external]
+        blue: Component,
+        /// The alpha component.
+        #[external]
+        alpha: Component,
+        /// The real arguments (the other arguments are just for the docs, this
+        /// function is a bit involved, so we parse the arguments manually).
+        args: Args,
+    ) -> SourceResult<Color> {
+        let mut args = args;
+        Ok(if let Some(string) = args.find::<Spanned<Str>>()? {
+            RgbaColor::from_str(&string.v).at(string.span)?.into()
+        } else {
+            let Component(r) = args.expect("red component")?;
+            let Component(g) = args.expect("green component")?;
+            let Component(b) = args.expect("blue component")?;
+            let Component(a) = args.eat()?.unwrap_or(Component(255));
+            RgbaColor::new(r, g, b, a).into()
+        })
+    }
+
+    /// Create a CMYK color.
+    ///
+    /// This is useful if you want to target a specific printer. The conversion
+    /// to RGB for display preview might differ from how your printer reproduces
+    /// the color.
+    ///
+    /// ## Example { #example }
+    /// ```example
+    /// #square(
+    ///   fill: cmyk(27%, 0%, 3%, 5%)
+    /// )
+    /// ````
+    ///
+    /// Display: CMYK
+    /// Category: visualize
+    #[func(Color)]
+    pub fn cmyk(
+        /// The cyan component.
+        cyan: RatioComponent,
+        /// The magenta component.
+        magenta: RatioComponent,
+        /// The yellow component.
+        yellow: RatioComponent,
+        /// The key component.
+        key: RatioComponent,
+    ) -> Color {
+        CmykColor::new(cyan.0, magenta.0, yellow.0, key.0).into()
+    }
+
+    /// Lightens a color by a given factor.
+    ///
+    /// Display: Lighten
+    /// Category: visualize
+    #[func(Color)]
+    pub fn lighten(
+        self,
+        /// The factor to lighten the color by.
+        factor: Ratio,
+    ) -> Color {
         match self {
             Self::Luma(luma) => Self::Luma(luma.lighten(factor)),
             Self::Rgba(rgba) => Self::Rgba(rgba.lighten(factor)),
@@ -51,8 +198,16 @@ impl Color {
         }
     }
 
-    /// Darken this color by the given factor.
-    pub fn darken(self, factor: Ratio) -> Self {
+    /// Darkens a color by a given factor.
+    ///
+    /// Display: Darken
+    /// Category: visualize
+    #[func(Color)]
+    pub fn darken(
+        self,
+        /// The factor to darken the color by.
+        factor: Ratio,
+    ) -> Color {
         match self {
             Self::Luma(luma) => Self::Luma(luma.darken(factor)),
             Self::Rgba(rgba) => Self::Rgba(rgba.darken(factor)),
@@ -60,12 +215,27 @@ impl Color {
         }
     }
 
-    /// Negate this color.
-    pub fn negate(self) -> Self {
+    /// Produces the negative of the color.
+    ///
+    /// Display: Negate
+    /// Category: visualize
+    #[func(Color)]
+    pub fn negate(self) -> Color {
         match self {
             Self::Luma(luma) => Self::Luma(luma.negate()),
             Self::Rgba(rgba) => Self::Rgba(rgba.negate()),
             Self::Cmyk(cmyk) => Self::Cmyk(cmyk.negate()),
+        }
+    }
+}
+
+impl Color {
+    /// Convert this color to RGBA.
+    pub fn to_rgba(self) -> RgbaColor {
+        match self {
+            Self::Luma(luma) => luma.to_rgba(),
+            Self::Rgba(rgba) => rgba,
+            Self::Cmyk(cmyk) => cmyk.to_rgba(),
         }
     }
 }
@@ -78,6 +248,34 @@ impl Debug for Color {
             Self::Cmyk(c) => Debug::fmt(c, f),
         }
     }
+}
+
+/// An integer or ratio component.
+pub struct Component(u8);
+
+cast! {
+    Component,
+    v: i64 => match v {
+        0 ..= 255 => Self(v as u8),
+        _ => Err("number must be between 0 and 255")?,
+    },
+    v: Ratio => if (0.0 ..= 1.0).contains(&v.get()) {
+        Self((v.get() * 255.0).round() as u8)
+    } else {
+        Err("ratio must be between 0% and 100%")?
+    },
+}
+
+/// A component that must be a ratio.
+pub struct RatioComponent(u8);
+
+cast! {
+    RatioComponent,
+    v: Ratio => if (0.0 ..= 1.0).contains(&v.get()) {
+        Self((v.get() * 255.0).round() as u8)
+    } else {
+        Err("ratio must be between 0% and 100%")?
+    },
 }
 
 /// An 8-bit grayscale color.

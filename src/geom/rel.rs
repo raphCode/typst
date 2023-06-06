@@ -1,8 +1,22 @@
 use super::*;
 
-/// A value that is composed of a relative and an absolute part.
+/// A length in relation to some known length.
+///
+/// This type is a combination of a [length]($type/length) with a
+/// [ratio]($type/ratio). It results from addition and subtraction
+/// of a length and a ratio. Wherever a relative length is expected, you can also
+/// use a bare length or ratio.
+///
+/// ## Example { #example }
+/// ```example
+/// #rect(width: 100% - 50pt)
+/// ```
+///
+/// Display: Relative Length
+/// Category: layout
+#[ty("relative")]
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct Rel<T: Numeric> {
+pub struct Rel<T: Numeric = Length> {
     /// The relative part.
     pub rel: Ratio,
     /// The absolute part.
@@ -152,11 +166,35 @@ impl<T: Numeric> Mul<Rel<T>> for f64 {
     }
 }
 
+impl<T: Numeric> Mul<Float> for Rel<T> {
+    type Output = Self;
+
+    fn mul(self, other: Float) -> Self::Output {
+        self * other.as_f64()
+    }
+}
+
+impl<T: Numeric> Mul<Rel<T>> for Float {
+    type Output = Rel<T>;
+
+    fn mul(self, other: Rel<T>) -> Self::Output {
+        other * self.as_f64()
+    }
+}
+
 impl<T: Numeric> Div<f64> for Rel<T> {
     type Output = Self;
 
     fn div(self, other: f64) -> Self::Output {
         Self { rel: self.rel / other, abs: self.abs / other }
+    }
+}
+
+impl<T: Numeric> Div<Float> for Rel<T> {
+    type Output = Self;
+
+    fn div(self, other: Float) -> Self::Output {
+        self / other.as_f64()
     }
 }
 

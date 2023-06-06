@@ -1,19 +1,24 @@
+use std::fmt::{self, Debug, Formatter};
 use std::ops::Range;
+use std::path::Path;
 
 use comemo::Prehashed;
+use heck::ToTitleCase;
 use md::escape::escape_html;
 use pulldown_cmark as md;
+use serde::{Deserialize, Serialize};
 use typed_arena::Arena;
 use typst::diag::FileResult;
-use typst::eval::Datetime;
+use typst::eval::{Datetime, Library, Value};
 use typst::font::{Font, FontBook};
-use typst::geom::{Point, Size};
+use typst::geom::{Abs, Point, Size};
 use typst::syntax::{Source, SourceId};
 use typst::util::Buffer;
 use typst::World;
+use unscanny::Scanner;
 use yaml_front_matter::YamlFrontMatter;
 
-use super::*;
+use super::{contributors, module, OutlineItem, Resolver, FILES, FONTS, GROUPS, LIBRARY};
 
 /// HTML documentation.
 #[derive(Serialize)]
@@ -382,6 +387,8 @@ fn code_block(resolver: &dyn Resolver, lang: &str, text: &str) -> Html {
             compile.push('\n');
         }
     }
+
+    compile = String::new();
 
     let mut parts = lang.split(':');
     let lang = parts.next().unwrap_or(lang);

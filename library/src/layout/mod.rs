@@ -63,6 +63,14 @@ use crate::visualize::{
 
 /// Hook up all layout definitions.
 pub(super) fn define(global: &mut Scope) {
+    global.define("length", Type::of::<Length>());
+    global.define("angle", Type::of::<Angle>());
+    global.define("ratio", Type::of::<Ratio>());
+    global.define("relative", Type::of::<Rel<Length>>());
+    global.define("fraction", Type::of::<Fr>());
+    global.define("direction", Type::of::<Dir>());
+    global.define("alignment", Type::of::<GenAlign>());
+    global.define("alignment2d", Type::of::<Axes<GenAlign>>());
     global.define("page", PageElem::func());
     global.define("pagebreak", PagebreakElem::func());
     global.define("v", VElem::func());
@@ -88,6 +96,8 @@ pub(super) fn define(global: &mut Scope) {
     global.define("rotate", RotateElem::func());
     global.define("hide", HideElem::func());
     global.define("measure", measure_func());
+
+    // Prelude.
     global.define("ltr", Dir::LTR);
     global.define("rtl", Dir::RTL);
     global.define("ttb", Dir::TTB);

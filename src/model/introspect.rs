@@ -11,14 +11,22 @@ use indexmap::IndexMap;
 use super::{Content, Selector};
 use crate::diag::StrResult;
 use crate::doc::{Frame, FrameItem, Meta, Position};
-use crate::eval::{cast, Value};
+use crate::eval::{cast, func, ty, Dict, Value, Vm};
 use crate::geom::{Point, Transform};
 use crate::model::Label;
 use crate::util::NonZeroExt;
 
 /// Identifies the location of an element in the document.
 ///
-/// This struct is created by [`Locator::locate`].
+/// Display: Location
+/// Category: meta
+#[ty("location")]
+#[scope({
+    scope.define("page", Location::page_func());
+    scope.define("position", Location::position_func());
+    scope.define("page-numbering", Location::page_numbering_func());
+    scope
+})]
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Location {
     /// The hash of the element.
@@ -40,6 +48,53 @@ impl Location {
     }
 }
 
+impl Location {
+    /// Return the page number for this location.
+    ///
+    /// Note that this does not return the value of the
+    /// [page counter]($type/counter) at this location, but the true page number
+    /// (starting from one).
+    ///
+    /// If you want to know the value of the page counter, use
+    /// `{counter(page).at(loc)}` instead.
+    ///
+    /// Display: Page
+    /// Category: meta
+    #[func(Location)]
+    pub fn page(self, vm: &mut Vm) -> NonZeroUsize {
+        vm.vt.introspector.page(self)
+    }
+
+    /// Return a dictionary with the page number and the x, y position for this
+    /// location. The page number starts at one and the coordinates are measured
+    /// from the top-left of the page.
+    ///
+    /// If you only need the page number, use `page()` instead as it allows
+    /// Typst to skip unnecessary work.
+    ///
+    /// Display: Position
+    /// Category: meta
+    #[func(Location)]
+    pub fn position(self, vm: &mut Vm) -> Dict {
+        vm.vt.introspector.position(self).into()
+    }
+
+    /// Returns the page numbering pattern of the page at this location. This
+    /// can be used when displaying the page counter in order to obtain the
+    /// local numbering. This is useful if you are building custom indices or
+    /// outlines.
+    ///
+    /// If the page numbering is set to `none` at that location, this function
+    /// returns `none`.
+    ///
+    /// Display: Page Numbering
+    /// Category: meta
+    #[func(Location)]
+    pub fn page_numbering(self, vm: &mut Vm) -> Value {
+        vm.vt.introspector.page_numbering(self)
+    }
+}
+
 impl Debug for Location {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.pad("..")
@@ -47,7 +102,7 @@ impl Debug for Location {
 }
 
 cast! {
-    type Location: "location",
+    type Location,
 }
 
 /// Provides locations for elements in the document.

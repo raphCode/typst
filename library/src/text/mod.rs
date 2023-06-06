@@ -164,7 +164,7 @@ pub struct TextElem {
     /// #set text(size: 20pt)
     /// very #text(1.5em)[big] text
     /// ```
-    #[parse(args.named_or_find("size")?)]
+    #[parse(args.find_named_or_pos("size")?)]
     #[fold]
     #[default(Abs::pt(11.0))]
     pub size: TextSize,
@@ -175,7 +175,7 @@ pub struct TextElem {
     /// #set text(fill: red)
     /// This text is red.
     /// ```
-    #[parse(args.named_or_find("fill")?)]
+    #[parse(args.find_named_or_pos("fill")?)]
     #[default(Color::BLACK.into())]
     pub fill: Paint,
 

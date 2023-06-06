@@ -37,6 +37,10 @@ impl Default for Stroke {
 /// In this representation, both fields are optional so that you can pass either
 /// just a paint (`red`), just a thickness (`0.1em`) or both (`2pt + red`) where
 /// this is expected.
+///
+/// Display: Stroke
+/// Category: visualize
+#[ty("stroke")]
 #[derive(Default, Clone, Eq, PartialEq, Hash)]
 pub struct PartialStroke<T = Length> {
     /// The stroke's paint.
@@ -202,7 +206,7 @@ impl Fold for PartialStroke<Abs> {
 }
 
 cast! {
-    type PartialStroke: "stroke",
+    type PartialStroke,
     thickness: Length => Self {
         thickness: Smart::Custom(thickness),
         ..Default::default()
@@ -278,6 +282,10 @@ impl Debug for LineJoin {
 }
 
 /// A line dash pattern.
+///
+/// Display: Dash pattern
+/// Category: visualize
+#[ty("dash-pattern")]
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct DashPattern<T = Length, DT = DashLength<T>> {
     /// The dash array.
@@ -307,22 +315,54 @@ impl<T: Default> From<Vec<DashLength<T>>> for DashPattern<T> {
     }
 }
 
-impl Resolve for DashPattern {
-    type Output = DashPattern<Abs>;
+/// The length of a dash in a line dash pattern.
+///
+/// Display: Dash Length
+/// Category: visualize
+#[ty("dash-length")]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum DashLength<T = Length> {
+    LineWidth,
+    Length(T),
+}
 
-    fn resolve(self, styles: StyleChain) -> Self::Output {
-        DashPattern {
-            array: self.array.into_iter().map(|l| l.resolve(styles)).collect(),
-            phase: self.phase.resolve(styles),
+impl From<Abs> for DashLength {
+    fn from(l: Abs) -> Self {
+        DashLength::Length(l.into())
+    }
+}
+
+impl<T> DashLength<T> {
+    fn finish(self, line_width: T) -> T {
+        match self {
+            Self::LineWidth => line_width,
+            Self::Length(l) => l,
         }
     }
 }
 
-// Same names as tikz:
-// https://tex.stackexchange.com/questions/45275/tikz-get-values-for-predefined-dash-patterns
 cast! {
-    DashPattern,
+    type DashLength,
+    "dot" => Self::LineWidth,
+    l: Length => Self::Length(l),
+}
 
+impl Resolve for DashLength {
+    type Output = DashLength<Abs>;
+
+    fn resolve(self, styles: StyleChain) -> Self::Output {
+        match self {
+            Self::LineWidth => DashLength::LineWidth,
+            Self::Length(v) => DashLength::Length(v.resolve(styles)),
+        }
+    }
+}
+
+cast! {
+    type DashPattern,
+
+    // Use same names as tikz:
+    // https://tex.stackexchange.com/questions/45275/tikz-get-values-for-predefined-dash-patterns
     "solid" => Vec::new().into(),
     "dotted" => vec![DashLength::LineWidth, Abs::pt(2.0).into()].into(),
     "densely-dotted" => vec![DashLength::LineWidth, Abs::pt(1.0).into()].into(),
@@ -347,41 +387,13 @@ cast! {
     },
 }
 
-/// The length of a dash in a line dash pattern
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum DashLength<T = Length> {
-    LineWidth,
-    Length(T),
-}
-
-impl From<Abs> for DashLength {
-    fn from(l: Abs) -> Self {
-        DashLength::Length(l.into())
-    }
-}
-
-impl<T> DashLength<T> {
-    fn finish(self, line_width: T) -> T {
-        match self {
-            Self::LineWidth => line_width,
-            Self::Length(l) => l,
-        }
-    }
-}
-
-impl Resolve for DashLength {
-    type Output = DashLength<Abs>;
+impl Resolve for DashPattern {
+    type Output = DashPattern<Abs>;
 
     fn resolve(self, styles: StyleChain) -> Self::Output {
-        match self {
-            Self::LineWidth => DashLength::LineWidth,
-            Self::Length(v) => DashLength::Length(v.resolve(styles)),
+        DashPattern {
+            array: self.array.into_iter().map(|l| l.resolve(styles)).collect(),
+            phase: self.phase.resolve(styles),
         }
     }
-}
-
-cast! {
-    DashLength,
-    "dot" => Self::LineWidth,
-    v: Length => Self::Length(v),
 }

@@ -8,6 +8,7 @@ mod castable;
 mod element;
 mod func;
 mod symbols;
+mod ty;
 
 use proc_macro::TokenStream as BoundaryStream;
 use proc_macro2::TokenStream;
@@ -24,6 +25,15 @@ use self::util::*;
 pub fn func(stream: BoundaryStream, item: BoundaryStream) -> BoundaryStream {
     let item = syn::parse_macro_input!(item as syn::ItemFn);
     func::func(stream.into(), &item)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Turns a type into a `NativeType`.
+#[proc_macro_attribute]
+pub fn ty(stream: BoundaryStream, item: BoundaryStream) -> BoundaryStream {
+    let mut item = syn::parse_macro_input!(item as syn::Item);
+    ty::ty(stream.into(), &mut item)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }

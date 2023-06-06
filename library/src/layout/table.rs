@@ -55,14 +55,14 @@ pub struct TableElem {
     /// Defines the gaps between columns. Takes precedence over `gutter`. See
     /// the [grid documentation]($func/grid) for more information on gutters.
     #[parse(
-        let gutter = args.named("gutter")?;
-        args.named("column-gutter")?.or_else(|| gutter.clone())
+        let gutter = args.find_named("gutter")?;
+        args.find_named("column-gutter")?.or_else(|| gutter.clone())
     )]
     pub column_gutter: TrackSizings,
 
     /// Defines the gaps between rows. Takes precedence over `gutter`. See the
     /// [grid documentation]($func/grid) for more information on gutters.
-    #[parse(args.named("row-gutter")?.or_else(|| gutter.clone()))]
+    #[parse(args.find_named("row-gutter")?.or_else(|| gutter.clone()))]
     pub row_gutter: TrackSizings,
 
     /// How to fill the cells.

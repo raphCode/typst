@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 use ecow::eco_format;
 
-use super::{format_str, Regex, Value};
+use super::{format_str, IntoValue, Regex, Value};
 use crate::diag::StrResult;
 use crate::geom::{Axes, Axis, GenAlign, Length, Numeric, PartialStroke, Rel, Smart};
 use Value::*;
@@ -13,7 +13,7 @@ use Value::*;
 /// Bail with a type mismatch error.
 macro_rules! mismatch {
     ($fmt:expr, $($value:expr),* $(,)?) => {
-        return Err(eco_format!($fmt, $($value.type_name()),*))
+        return Err(eco_format!($fmt, $($value.ty()),*))
     };
 }
 
@@ -54,7 +54,7 @@ pub fn pos(value: Value) -> StrResult<Value> {
 /// Compute the negation of a value.
 pub fn neg(value: Value) -> StrResult<Value> {
     Ok(match value {
-        Int(v) => Int(v.checked_neg().ok_or("value is too large")?),
+        Int(v) => Int(v.checked_neg()?),
         Float(v) => Float(-v),
         Length(v) => Length(-v),
         Angle(v) => Angle(-v),
@@ -71,9 +71,9 @@ pub fn add(lhs: Value, rhs: Value) -> StrResult<Value> {
         (a, None) => a,
         (None, b) => b,
 
-        (Int(a), Int(b)) => Int(a.checked_add(b).ok_or("value is too large")?),
-        (Int(a), Float(b)) => Float(a as f64 + b),
-        (Float(a), Int(b)) => Float(a + b as f64),
+        (Int(a), Int(b)) => Int(a.checked_add(b)?),
+        (Int(a), Float(b)) => Float(a.as_float() + b),
+        (Float(a), Int(b)) => Float(a + b.as_float()),
         (Float(a), Float(b)) => Float(a + b),
 
         (Angle(a), Angle(b)) => Angle(a + b),
@@ -138,9 +138,9 @@ pub fn add(lhs: Value, rhs: Value) -> StrResult<Value> {
 /// Compute the difference of two values.
 pub fn sub(lhs: Value, rhs: Value) -> StrResult<Value> {
     Ok(match (lhs, rhs) {
-        (Int(a), Int(b)) => Int(a.checked_sub(b).ok_or("value is too large")?),
-        (Int(a), Float(b)) => Float(a as f64 - b),
-        (Float(a), Int(b)) => Float(a - b as f64),
+        (Int(a), Int(b)) => Int(a.checked_sub(b)?),
+        (Int(a), Float(b)) => Float(a.as_float() - b),
+        (Float(a), Int(b)) => Float(a - b.as_float()),
         (Float(a), Float(b)) => Float(a - b),
 
         (Angle(a), Angle(b)) => Angle(a - b),
@@ -166,49 +166,49 @@ pub fn sub(lhs: Value, rhs: Value) -> StrResult<Value> {
 /// Compute the product of two values.
 pub fn mul(lhs: Value, rhs: Value) -> StrResult<Value> {
     Ok(match (lhs, rhs) {
-        (Int(a), Int(b)) => Int(a.checked_mul(b).ok_or("value is too large")?),
-        (Int(a), Float(b)) => Float(a as f64 * b),
-        (Float(a), Int(b)) => Float(a * b as f64),
+        (Int(a), Int(b)) => Int(a.checked_mul(b)?),
+        (Int(a), Float(b)) => Float(a.as_float() * b),
+        (Float(a), Int(b)) => Float(a * b.as_float()),
         (Float(a), Float(b)) => Float(a * b),
 
-        (Length(a), Int(b)) => Length(a * b as f64),
+        (Length(a), Int(b)) => Length(a * b.as_float()),
         (Length(a), Float(b)) => Length(a * b),
         (Length(a), Ratio(b)) => Length(a * b.get()),
-        (Int(a), Length(b)) => Length(b * a as f64),
+        (Int(a), Length(b)) => Length(b * a.as_float()),
         (Float(a), Length(b)) => Length(b * a),
         (Ratio(a), Length(b)) => Length(b * a.get()),
 
-        (Angle(a), Int(b)) => Angle(a * b as f64),
+        (Angle(a), Int(b)) => Angle(a * b.as_float()),
         (Angle(a), Float(b)) => Angle(a * b),
         (Angle(a), Ratio(b)) => Angle(a * b.get()),
-        (Int(a), Angle(b)) => Angle(a as f64 * b),
+        (Int(a), Angle(b)) => Angle(a.as_float() * b),
         (Float(a), Angle(b)) => Angle(a * b),
         (Ratio(a), Angle(b)) => Angle(a.get() * b),
 
         (Ratio(a), Ratio(b)) => Ratio(a * b),
-        (Ratio(a), Int(b)) => Ratio(a * b as f64),
+        (Ratio(a), Int(b)) => Ratio(a * b.as_float()),
         (Ratio(a), Float(b)) => Ratio(a * b),
-        (Int(a), Ratio(b)) => Ratio(a as f64 * b),
+        (Int(a), Ratio(b)) => Ratio(a.as_float() * b),
         (Float(a), Ratio(b)) => Ratio(a * b),
 
-        (Relative(a), Int(b)) => Relative(a * b as f64),
+        (Relative(a), Int(b)) => Relative(a * b.as_float()),
         (Relative(a), Float(b)) => Relative(a * b),
         (Relative(a), Ratio(b)) => Relative(a * b.get()),
-        (Int(a), Relative(b)) => Relative(a as f64 * b),
+        (Int(a), Relative(b)) => Relative(a.as_float() * b),
         (Float(a), Relative(b)) => Relative(a * b),
         (Ratio(a), Relative(b)) => Relative(a.get() * b),
 
-        (Fraction(a), Int(b)) => Fraction(a * b as f64),
+        (Fraction(a), Int(b)) => Fraction(a * b.as_float()),
         (Fraction(a), Float(b)) => Fraction(a * b),
         (Fraction(a), Ratio(b)) => Fraction(a * b.get()),
-        (Int(a), Fraction(b)) => Fraction(a as f64 * b),
+        (Int(a), Fraction(b)) => Fraction(a.as_float() * b),
         (Float(a), Fraction(b)) => Fraction(a * b),
         (Ratio(a), Fraction(b)) => Fraction(a.get() * b),
 
-        (Str(a), Int(b)) => Str(a.repeat(b)?),
-        (Int(a), Str(b)) => Str(b.repeat(a)?),
-        (Array(a), Int(b)) => Array(a.repeat(b)?),
-        (Int(a), Array(b)) => Array(b.repeat(a)?),
+        (Str(a), b @ Int(_)) => Str(a.repeat(b.cast()?)?),
+        (a @ Int(_), Str(b)) => Str(b.repeat(a.cast()?)?),
+        (Array(a), b @ Int(_)) => Array(a.repeat(b.cast()?)?),
+        (a @ Int(_), Array(b)) => Array(b.repeat(a.cast()?)?),
         (Content(a), b @ Int(_)) => Content(a.repeat(b.cast()?)),
         (a @ Int(_), Content(b)) => Content(b.repeat(a.cast()?)),
 
@@ -223,34 +223,34 @@ pub fn div(lhs: Value, rhs: Value) -> StrResult<Value> {
     }
 
     Ok(match (lhs, rhs) {
-        (Int(a), Int(b)) => Float(a as f64 / b as f64),
-        (Int(a), Float(b)) => Float(a as f64 / b),
-        (Float(a), Int(b)) => Float(a / b as f64),
+        (Int(a), Int(b)) => Float(a.as_float() / b.as_float()),
+        (Int(a), Float(b)) => Float(a.as_float() / b),
+        (Float(a), Int(b)) => Float(a / b.as_float()),
         (Float(a), Float(b)) => Float(a / b),
 
-        (Length(a), Int(b)) => Length(a / b as f64),
+        (Length(a), Int(b)) => Length(a / b.as_float()),
         (Length(a), Float(b)) => Length(a / b),
         (Length(a), Length(b)) => Float(try_div_length(a, b)?),
         (Length(a), Relative(b)) if b.rel.is_zero() => Float(try_div_length(a, b.abs)?),
 
-        (Angle(a), Int(b)) => Angle(a / b as f64),
+        (Angle(a), Int(b)) => Angle(a / b.as_float()),
         (Angle(a), Float(b)) => Angle(a / b),
-        (Angle(a), Angle(b)) => Float(a / b),
+        (Angle(a), Angle(b)) => Float((a / b).into()),
 
-        (Ratio(a), Int(b)) => Ratio(a / b as f64),
+        (Ratio(a), Int(b)) => Ratio(a / b.as_float()),
         (Ratio(a), Float(b)) => Ratio(a / b),
-        (Ratio(a), Ratio(b)) => Float(a / b),
-        (Ratio(a), Relative(b)) if b.abs.is_zero() => Float(a / b.rel),
+        (Ratio(a), Ratio(b)) => Float((a / b).into()),
+        (Ratio(a), Relative(b)) if b.abs.is_zero() => Float((a / b.rel).into()),
 
-        (Relative(a), Int(b)) => Relative(a / b as f64),
+        (Relative(a), Int(b)) => Relative(a / b.as_float()),
         (Relative(a), Float(b)) => Relative(a / b),
         (Relative(a), Length(b)) if a.rel.is_zero() => Float(try_div_length(a.abs, b)?),
-        (Relative(a), Ratio(b)) if a.abs.is_zero() => Float(a.rel / b),
+        (Relative(a), Ratio(b)) if a.abs.is_zero() => Float((a.rel / b).into()),
         (Relative(a), Relative(b)) => Float(try_div_relative(a, b)?),
 
-        (Fraction(a), Int(b)) => Fraction(a / b as f64),
+        (Fraction(a), Int(b)) => Fraction(a / b.as_float()),
         (Fraction(a), Float(b)) => Fraction(a / b),
-        (Fraction(a), Fraction(b)) => Float(a / b),
+        (Fraction(a), Fraction(b)) => Float((a / b).into()),
 
         (a, b) => mismatch!("cannot divide {} by {}", a, b),
     })
@@ -259,8 +259,8 @@ pub fn div(lhs: Value, rhs: Value) -> StrResult<Value> {
 /// Whether a value is a numeric zero.
 fn is_zero(v: &Value) -> bool {
     match *v {
-        Int(v) => v == 0,
-        Float(v) => v == 0.0,
+        Int(v) => v.as_i64() == 0,
+        Float(v) => v.as_f64() == 0.0,
         Length(v) => v.is_zero(),
         Angle(v) => v.is_zero(),
         Ratio(v) => v.is_zero(),
@@ -271,13 +271,16 @@ fn is_zero(v: &Value) -> bool {
 }
 
 /// Try to divide two lengths.
-fn try_div_length(a: Length, b: Length) -> StrResult<f64> {
-    a.try_div(b).ok_or_else(|| "cannot divide these two lengths".into())
+fn try_div_length(a: Length, b: Length) -> StrResult<super::Float> {
+    a.try_div(b)
+        .map(Into::into)
+        .ok_or_else(|| "cannot divide these two lengths".into())
 }
 
 /// Try to divide two relative lengths.
-fn try_div_relative(a: Rel<Length>, b: Rel<Length>) -> StrResult<f64> {
+fn try_div_relative(a: Rel<Length>, b: Rel<Length>) -> StrResult<super::Float> {
     a.try_div(b)
+        .map(Into::into)
         .ok_or_else(|| "cannot divide these two relative lengths".into())
 }
 
@@ -292,7 +295,7 @@ pub fn not(value: Value) -> StrResult<Value> {
 /// Compute the logical "and" of two values.
 pub fn and(lhs: Value, rhs: Value) -> StrResult<Value> {
     match (lhs, rhs) {
-        (Bool(a), Bool(b)) => Ok(Bool(a && b)),
+        (Bool(a), Bool(b)) => Ok(Bool(a & b)),
         (a, b) => mismatch!("cannot apply 'and' to {} and {}", a, b),
     }
 }
@@ -300,19 +303,19 @@ pub fn and(lhs: Value, rhs: Value) -> StrResult<Value> {
 /// Compute the logical "or" of two values.
 pub fn or(lhs: Value, rhs: Value) -> StrResult<Value> {
     match (lhs, rhs) {
-        (Bool(a), Bool(b)) => Ok(Bool(a || b)),
+        (Bool(a), Bool(b)) => Ok(Bool(a | b)),
         (a, b) => mismatch!("cannot apply 'or' to {} and {}", a, b),
     }
 }
 
 /// Compute whether two values are equal.
 pub fn eq(lhs: Value, rhs: Value) -> StrResult<Value> {
-    Ok(Bool(equal(&lhs, &rhs)))
+    Ok(equal(&lhs, &rhs).into_value())
 }
 
 /// Compute whether two values are unequal.
 pub fn neq(lhs: Value, rhs: Value) -> StrResult<Value> {
-    Ok(Bool(!equal(&lhs, &rhs)))
+    Ok((!equal(&lhs, &rhs)).into_value())
 }
 
 macro_rules! comparison {
@@ -320,7 +323,7 @@ macro_rules! comparison {
         /// Compute how a value compares with another value.
         pub fn $name(lhs: Value, rhs: Value) -> StrResult<Value> {
             let ordering = compare(&lhs, &rhs)?;
-            Ok(Bool(matches!(ordering, $($pat)*)))
+            Ok(matches!(ordering, $($pat)*).into_value())
         }
     };
 }
@@ -353,16 +356,20 @@ pub fn equal(lhs: &Value, rhs: &Value) -> bool {
         (Dict(a), Dict(b)) => a == b,
         (Func(a), Func(b)) => a == b,
         (Args(a), Args(b)) => a == b,
+        (Type(a), Type(b)) => a == b,
         (Module(a), Module(b)) => a == b,
         (Dyn(a), Dyn(b)) => a == b,
 
         // Some technically different things should compare equal.
-        (&Int(a), &Float(b)) => a as f64 == b,
-        (&Float(a), &Int(b)) => a == b as f64,
+        (&Int(a), &Float(b)) => a.as_float() == b,
+        (&Float(a), &Int(b)) => a == b.as_float(),
         (&Length(a), &Relative(b)) => a == b.abs && b.rel.is_zero(),
         (&Ratio(a), &Relative(b)) => a == b.rel && b.abs.is_zero(),
         (&Relative(a), &Length(b)) => a.abs == b && a.rel.is_zero(),
         (&Relative(a), &Ratio(b)) => a.rel == b && a.abs.is_zero(),
+
+        // Temporary for migration.
+        (Type(a), Str(b)) | (Str(b), Type(a)) => a.long() == b.as_str(),
 
         _ => false,
     }
@@ -382,8 +389,8 @@ pub fn compare(lhs: &Value, rhs: &Value) -> StrResult<Ordering> {
         (Str(a), Str(b)) => a.cmp(b),
 
         // Some technically different things should be comparable.
-        (Int(a), Float(b)) => try_cmp_values(&(*a as f64), b)?,
-        (Float(a), Int(b)) => try_cmp_values(a, &(*b as f64))?,
+        (Int(a), Float(b)) => try_cmp_values(&a.as_float(), b)?,
+        (Float(a), Int(b)) => try_cmp_values(a, &b.as_float())?,
         (Length(a), Relative(b)) if b.rel.is_zero() => try_cmp_values(a, &b.abs)?,
         (Ratio(a), Relative(b)) if b.abs.is_zero() => a.cmp(&b.rel),
         (Relative(a), Length(b)) if a.rel.is_zero() => try_cmp_values(&a.abs, b)?,
@@ -402,7 +409,7 @@ fn try_cmp_values<T: PartialOrd + Debug>(a: &T, b: &T) -> StrResult<Ordering> {
 /// Test whether one value is "in" another one.
 pub fn in_(lhs: Value, rhs: Value) -> StrResult<Value> {
     if let Some(b) = contains(&lhs, &rhs) {
-        Ok(Bool(b))
+        Ok(b.into_value())
     } else {
         mismatch!("cannot apply 'in' to {} and {}", lhs, rhs)
     }
@@ -411,7 +418,7 @@ pub fn in_(lhs: Value, rhs: Value) -> StrResult<Value> {
 /// Test whether one value is "not in" another one.
 pub fn not_in(lhs: Value, rhs: Value) -> StrResult<Value> {
     if let Some(b) = contains(&lhs, &rhs) {
-        Ok(Bool(!b))
+        Ok((!b).into_value())
     } else {
         mismatch!("cannot apply 'not in' to {} and {}", lhs, rhs)
     }
@@ -423,7 +430,7 @@ pub fn contains(lhs: &Value, rhs: &Value) -> Option<bool> {
         (Str(a), Str(b)) => Some(b.as_str().contains(a.as_str())),
         (Dyn(a), Str(b)) => a.downcast::<Regex>().map(|regex| regex.is_match(b)),
         (Str(a), Dict(b)) => Some(b.contains(a)),
-        (a, Array(b)) => Some(b.contains(a)),
+        (a, Array(b)) => Some(b.contains(a.clone())),
         _ => Option::None,
     }
 }

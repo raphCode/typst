@@ -186,7 +186,7 @@ impl Show for RefElem {
 
         let numbers = refable
             .counter()
-            .at(vt, elem.location().unwrap())?
+            .at(elem.location().unwrap(), vt)?
             .display(vt, &numbering.trimmed())?;
 
         let supplement = match self.supplement(styles) {

@@ -7,16 +7,121 @@ use ecow::eco_format;
 use once_cell::sync::Lazy;
 
 use super::{
-    cast, Args, CastInfo, Eval, FlowEvent, IntoValue, Route, Scope, Scopes, Tracer,
-    Value, Vm,
+    cast, func, ty, Args, CastInfo, Eval, FlowEvent, IntoValue, Route, Scope, Scopes,
+    Tracer, Value, Vm,
 };
 use crate::diag::{bail, SourceResult, StrResult};
-use crate::model::{ElemFunc, Introspector, Locator, Vt};
+use crate::model::{ElemFunc, Introspector, Locator, Selector, Vt};
 use crate::syntax::ast::{self, AstNode, Expr, Ident};
 use crate::syntax::{SourceId, Span, SyntaxNode};
 use crate::World;
 
-/// An evaluatable function.
+/// A mapping from argument values to a return value.
+///
+/// You can call a function by writing a comma-separated list of function
+/// _arguments_ enclosed in parentheses directly after the function name.
+/// Additionally, you can pass any number of trailing content blocks arguments
+/// to a function _after_ the normal argument list. If the normal argument list
+/// would become empty, it can be omitted. Typst supports positional and named
+/// arguments. The former are identified by position and type, while the later
+/// are written as `name: value`.
+///
+/// Within math mode, function calls have special behaviour. See the [math
+/// documentation]($category/math) for more details.
+///
+/// ## Example { #example }
+/// ```example
+/// // Call a function.
+/// #list([A], [B])
+///
+/// // Named arguments and trailing
+/// // content blocks.
+/// #enum(start: 2)[A][B]
+///
+/// // Version without parentheses.
+/// #list[A][B]
+/// ```
+///
+/// Functions are a fundamental building block of Typst. Typst provides
+/// functions for a variety of typesetting tasks. Moreover, the markup you write
+/// is backed by functions and all styling happens through functions. This
+/// reference lists all available functions and how you can use them. Please
+/// also refer to the documentation about [set]($styling/#set-rules) and
+/// [show]($styling/#show-rules) rules to learn about additional ways you can
+/// work with functions in Typst.
+///
+/// ## Element functions { #element-functions }
+/// Some functions are associated with _elements_ like [headings]($func/heading)
+/// or [tables]($func/table). When called, these create an element of their
+/// respective kind. In contrast to normal functions, they can further be used
+/// in [set rules]($styling/#set-rules), [show rules]($styling/#show-rules), and
+/// [selectors]($type/selector).
+///
+/// ## Function scopes { #function-scopes }
+/// Functions can hold related definitions in their own scope, similar to a
+/// [module]($scripting/#modules). Examples of this are
+/// [`assert.eq`]($func/assert.eq) or [`list.item`]($func/list.item). However,
+/// this feature is currently only available for built-in functions.
+///
+/// ## Defining functions { #definitions }
+/// You can define your own function with a [let binding]($scripting/#bindings)
+/// that has a parameter list after the binding's name. The parameter list can
+/// contain positional parameters, named parameters with default values and
+/// [argument sinks]($type/arguments). The right-hand side of the binding can be
+/// a block or any other expression. It defines the function's return value and
+/// can depend on the parameters.
+///
+/// ```example
+/// #let alert(body, fill: red) = {
+///   set text(white)
+///   set align(center)
+///   rect(
+///     fill: fill,
+///     inset: 8pt,
+///     radius: 4pt,
+///     [*Warning:\ #body*],
+///   )
+/// }
+///
+/// #alert[
+///   Danger is imminent!
+/// ]
+///
+/// #alert(fill: blue)[
+///   KEEP OFF TRACKS
+/// ]
+/// ```
+///
+/// ## Unnamed functions { #unnamed }
+/// You can also created an unnamed function without creating a binding by
+/// specifying a parameter list followed by `=>` and the function body. If your
+/// function has just one parameter, the parentheses around the parameter list
+/// are optional. Unnamed functions are mainly useful for show rules, but also
+/// for settable properties that take functions like the page function's
+/// [`footer`]($func/page.footer) property.
+///
+/// ```example
+/// #show "once?": it => [#it #it]
+/// once?
+/// ```
+///
+/// ## Notable fact
+/// In Typst, all functions are _pure._ This means that for the same
+/// arguments, they always return the same result. They cannot "remember" things to
+/// produce another value when they are called a second time.
+///
+/// The only exception are built-in methods like
+/// [`array.push(value)`]($type/array.push). These can modify the values they are
+/// called on.
+///
+/// Display: Function
+/// Category: foundations
+#[ty("func")]
+#[scope({
+    scope.define("where", Func::where_func());
+    scope.define("with", Func::with_func());
+    scope
+})]
 #[derive(Clone, Hash)]
 #[allow(clippy::derived_hash_with_manual_eq)]
 pub struct Func {
@@ -138,12 +243,6 @@ impl Func {
         self.call_vm(&mut vm, args)
     }
 
-    /// Apply the given arguments to the function.
-    pub fn with(self, args: Args) -> Self {
-        let span = self.span;
-        Self { repr: Repr::With(Arc::new((self, args))), span }
-    }
-
     /// Extract the element function, if it is one.
     pub fn element(&self) -> Option<ElemFunc> {
         match self.repr {
@@ -174,6 +273,34 @@ impl Func {
             }
             Repr::With(arc) => arc.0.get(field),
         }
+    }
+}
+
+impl Func {
+    /// Returns a new function that has the given arguments pre-applied.
+    ///
+    /// Display: With
+    /// Category: foundations
+    #[func(Func)]
+    pub fn with(self, args: Args) -> Func {
+        let span = self.span;
+        Self { repr: Repr::With(Arc::new((self, args))), span }
+    }
+
+    /// Returns a selector that filters for elements belonging to this function
+    /// whose fields have the values of the given arguments.
+    ///
+    /// Display: Where
+    /// Category: foundations
+    #[func(Func)]
+    pub fn where_(self, args: Args) -> StrResult<Selector> {
+        let mut args = args;
+        let fields = args.named();
+        args.items.retain(|arg| arg.name.is_none());
+        Ok(self
+            .element()
+            .ok_or("`where()` can only be called on element functions")?
+            .where_(fields))
     }
 }
 
@@ -358,7 +485,7 @@ impl Closure {
         // Parse the arguments according to the parameter list.
         let num_pos_params =
             closure.params.iter().filter(|p| matches!(p, Param::Pos(_))).count();
-        let num_pos_args = args.to_pos().len();
+        let num_pos_args = args.pos().len();
         let sink_size = num_pos_args.checked_sub(num_pos_params);
 
         let mut sink = None;
@@ -384,8 +511,9 @@ impl Closure {
                     }
                 }
                 Param::Named(ident, default) => {
-                    let value =
-                        args.named::<Value>(ident)?.unwrap_or_else(|| default.clone());
+                    let value = args
+                        .find_named::<Value>(ident)?
+                        .unwrap_or_else(|| default.clone());
                     vm.define(ident.clone(), value);
                 }
             }

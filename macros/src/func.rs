@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use super::*;
 
 /// Expand the `#[func]` macro.
@@ -34,6 +36,13 @@ struct Param {
     default: Option<syn::Expr>,
     ident: Ident,
     ty: syn::Type,
+    binding: Binding,
+}
+
+enum Binding {
+    Owned,
+    Ref,
+    RefMut,
 }
 
 fn prepare(stream: TokenStream, item: &syn::ItemFn) -> Result<Func> {
@@ -47,8 +56,35 @@ fn prepare(stream: TokenStream, item: &syn::ItemFn) -> Result<Func> {
     let mut span = false;
     let mut params = vec![];
     for input in &sig.inputs {
-        let syn::FnArg::Typed(typed) = input else {
-            bail!(input, "self is not allowed here");
+        let typed = match input {
+            syn::FnArg::Receiver(recv) => {
+                let mut binding = Binding::Owned;
+                let mut ty = recv.ty.as_ref();
+                if recv.reference.is_some() {
+                    if recv.mutability.is_some() {
+                        binding = Binding::RefMut
+                    } else {
+                        binding = Binding::Ref
+                    }
+                };
+
+                params.push(Param {
+                    name: "self".into(),
+                    docs: "".into(),
+                    external: false,
+                    named: false,
+                    variadic: false,
+                    default: None,
+                    ident: syn::Ident::new("_self", recv.self_token.span),
+                    ty: match &parent {
+                        Some(ty) => ty.clone(),
+                        None => bail!(recv, "explicit parent type required"),
+                    },
+                    binding,
+                });
+                continue;
+            }
+            syn::FnArg::Typed(typed) => typed,
         };
 
         let syn::Pat::Ident(syn::PatIdent {
@@ -80,6 +116,7 @@ fn prepare(stream: TokenStream, item: &syn::ItemFn) -> Result<Func> {
                     }),
                     ident: ident.clone(),
                     ty: (*typed.ty).clone(),
+                    binding: Binding::Owned,
                 });
 
                 validate_attrs(&attrs)?;
@@ -141,12 +178,14 @@ fn create(func: &Func, item: &syn::ItemFn) -> TokenStream {
         .iter()
         .filter(|param| !param.external)
         .map(create_param_parser);
-
-    let args = func
-        .params
-        .iter()
-        .filter(|param| !param.external)
-        .map(|param| &param.ident);
+    let args = func.params.iter().filter(|param| !param.external).map(|param| {
+        let ident = &param.ident;
+        match param.binding {
+            Binding::Owned => quote! { #ident },
+            Binding::Ref => quote! { &#ident },
+            Binding::RefMut => quote! { &mut #ident },
+        }
+    });
 
     let parent = func.parent.as_ref().map(|ty| quote! { #ty:: });
     let vm_ = func.vm.then(|| quote! { vm, });
@@ -199,8 +238,8 @@ fn create(func: &Func, item: &syn::ItemFn) -> TokenStream {
             };
             &FUNC
         }
-
         #[doc = #docs]
+        #[allow(dead_code)]
         #item
     }
 }
@@ -245,7 +284,7 @@ fn create_param_parser(param: &Param) -> TokenStream {
     let mut value = if param.variadic {
         quote! { args.all()? }
     } else if param.named {
-        quote! { args.named(#name)? }
+        quote! { args.find_named(#name)? }
     } else if param.default.is_some() {
         quote! { args.eat()? }
     } else {

@@ -21,23 +21,23 @@ use crate::prelude::*;
 pub struct PadElem {
     /// The padding at the left side.
     #[parse(
-        let all = args.named("rest")?.or(args.find()?);
-        let x = args.named("x")?.or(all);
-        let y = args.named("y")?.or(all);
-        args.named("left")?.or(x)
+        let all = args.find_named("rest")?.or(args.find()?);
+        let x = args.find_named("x")?.or(all);
+        let y = args.find_named("y")?.or(all);
+        args.find_named("left")?.or(x)
     )]
     pub left: Rel<Length>,
 
     /// The padding at the top side.
-    #[parse(args.named("top")?.or(y))]
+    #[parse(args.find_named("top")?.or(y))]
     pub top: Rel<Length>,
 
     /// The padding at the right side.
-    #[parse(args.named("right")?.or(x))]
+    #[parse(args.find_named("right")?.or(x))]
     pub right: Rel<Length>,
 
     /// The padding at the bottom side.
-    #[parse(args.named("bottom")?.or(y))]
+    #[parse(args.find_named("bottom")?.or(y))]
     pub bottom: Rel<Length>,
 
     /// The horizontal padding. Both `left` and `right` take precedence over

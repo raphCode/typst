@@ -1,6 +1,17 @@
 use super::*;
 
 /// The four directions into which content can be laid out.
+///
+/// Display: Direction
+/// Category: layout
+#[ty("direction")]
+#[scope({
+    scope.define("ltr", Dir::LTR);
+    scope.define("rtl", Dir::RTL);
+    scope.define("ttb", Dir::TTB);
+    scope.define("btt", Dir::BTT);
+    scope
+})]
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Dir {
     /// Left to right.
@@ -75,5 +86,5 @@ impl Debug for Dir {
 }
 
 cast! {
-    type Dir: "direction",
+    type Dir,
 }
