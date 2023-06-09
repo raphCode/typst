@@ -433,7 +433,7 @@ fn code_block(resolver: &dyn Resolver, lang: &str, text: &str) -> Html {
         frames.truncate(1);
     }
 
-    resolver.example(highlighted, &frames)
+    resolver.example(&display, highlighted, &frames)
 }
 
 /// Extract an attribute value from an HTML element.
